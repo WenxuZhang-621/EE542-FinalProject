@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-003",
+  "from_addr": "sales@dg-hardware.example.cn",
+  "subject": "回复：PO-2026-0420 交货安排",
+  "date": "2026-11-10",
+  "body_text": "王经理您好，\n\n贵司订单 PO-2026-0420 共 800 件铰链。由于电镀产能不足，我们 11 月 28 日只能先发 500 件，剩余 300 件预计 12 月中旬发出，具体日期另行通知。\n\n东莞五金 李明",
+  "attachments": [],
+  "thread_id": "t-003"
+}

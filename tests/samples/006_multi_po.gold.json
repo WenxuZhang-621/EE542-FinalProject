@@ -1,0 +1,32 @@
+[
+  {
+    "po_number": "PO-2026-0440",
+    "supplier": "harbor-textiles.example.com",
+    "status": "confirmed",
+    "change_type": "none",
+    "source_email_id": "sample-006",
+    "original_date": "2026-12-03",
+    "confirmed_date": "2026-12-03",
+    "quantity_ordered": 600,
+    "quantity_confirmed": 600,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": ""
+  },
+  {
+    "po_number": "PO-2026-0441",
+    "supplier": "harbor-textiles.example.com",
+    "status": "delayed",
+    "change_type": "date_change",
+    "source_email_id": "sample-006",
+    "original_date": "2026-12-03",
+    "confirmed_date": "2026-12-17",
+    "quantity_ordered": 400,
+    "quantity_confirmed": 400,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "dye lot failed QC"
+  }
+]

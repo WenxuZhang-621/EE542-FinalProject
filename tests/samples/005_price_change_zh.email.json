@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-005",
+  "from_addr": "export@nb-plastics.example.cn",
+  "subject": "PO-2026-0438 价格调整通知",
+  "date": "2026-11-12",
+  "body_text": "Alice 您好，\n\n因原材料价格上涨，订单 PO-2026-0438（2000 个收纳盒）的单价需从 2.40 美元调整为 2.65 美元。数量和交期（12 月 10 日）不变。请确认是否接受新价格。\n\n宁波塑料 张华",
+  "attachments": [],
+  "thread_id": "t-005"
+}

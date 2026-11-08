@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-006",
+  "from_addr": "logistics@harbor-textiles.example.com",
+  "subject": "Update on PO-2026-0440 and PO-2026-0441",
+  "date": "2026-11-13",
+  "body_text": "Hello Alice,\n\nQuick update on your two orders:\n- PO-2026-0440 (600 m cotton fabric): confirmed, ships Dec 3 as planned.\n- PO-2026-0441 (400 m linen fabric): the dye lot failed QC, so the ship date moves from Dec 3 to Dec 17.\n\nBest,\nSam Park",
+  "attachments": [],
+  "thread_id": "t-006"
+}

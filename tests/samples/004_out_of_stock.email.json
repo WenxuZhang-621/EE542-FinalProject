@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-004",
+  "from_addr": "support@nova-sensors.example.com",
+  "subject": "Re: PO-2026-0431 XR-200 sensors",
+  "date": "2026-11-11",
+  "body_text": "Dear Alice,\n\nUnfortunately the XR-200 sensor has been discontinued by the manufacturer, and we have no remaining stock. We cannot fulfil the 300 units on PO-2026-0431. Our sales team can suggest the XR-210 as a replacement.\n\nSorry for the trouble,\nMaria Lopez",
+  "attachments": [],
+  "thread_id": "t-004"
+}

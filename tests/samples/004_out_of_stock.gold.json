@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0431",
+    "supplier": "nova-sensors.example.com",
+    "status": "out_of_stock",
+    "change_type": "quantity_change",
+    "source_email_id": "sample-004",
+    "original_date": null,
+    "confirmed_date": null,
+    "quantity_ordered": 300,
+    "quantity_confirmed": 0,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "XR-200 discontinued; supplier suggests XR-210 as replacement"
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0415",
+    "supplier": "pacific-fasteners.example.com",
+    "status": "confirmed",
+    "change_type": "none",
+    "source_email_id": "sample-002",
+    "original_date": "2026-12-05",
+    "confirmed_date": "2026-12-05",
+    "quantity_ordered": 1200,
+    "quantity_confirmed": 1200,
+    "unit_price": 0.18,
+    "currency": "USD",
+    "confidence": 0.95,
+    "notes": ""
+  }
+]

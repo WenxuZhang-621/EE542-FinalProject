@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0420",
+    "supplier": "dg-hardware.example.cn",
+    "status": "partial",
+    "change_type": "quantity_change",
+    "source_email_id": "sample-003",
+    "original_date": "2026-11-28",
+    "confirmed_date": "2026-11-28",
+    "quantity_ordered": 800,
+    "quantity_confirmed": 500,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.85,
+    "notes": "remaining 300 pcs expected mid-December, date to be confirmed"
+  }
+]

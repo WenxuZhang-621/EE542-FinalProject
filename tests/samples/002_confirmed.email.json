@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-002",
+  "from_addr": "orders@pacific-fasteners.example.com",
+  "subject": "PO-2026-0415 order acknowledgement",
+  "date": "2026-11-09",
+  "body_text": "Hi Alice,\n\nWe confirm receipt of PO-2026-0415 for 1,200 pcs M6 hex bolts. Ship date Dec 5 as requested. Unit price USD 0.18 as quoted.\n\nRegards,\nTom Chen\nPacific Fasteners",
+  "attachments": [],
+  "thread_id": "t-002"
+}

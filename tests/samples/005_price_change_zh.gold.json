@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0438",
+    "supplier": "nb-plastics.example.cn",
+    "status": "price_change",
+    "change_type": "price_change",
+    "source_email_id": "sample-005",
+    "original_date": "2026-12-10",
+    "confirmed_date": "2026-12-10",
+    "quantity_ordered": 2000,
+    "quantity_confirmed": 2000,
+    "unit_price": 2.65,
+    "currency": "USD",
+    "confidence": 0.9,
+    "notes": "unit price raised from 2.40 to 2.65 USD due to raw material costs; buyer must approve"
+  }
+]
