@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0412",
+    "supplier": "shenzhen-parts.example.com",
+    "status": "delayed",
+    "change_type": "date_change",
+    "source_email_id": "sample-001",
+    "original_date": "2026-12-01",
+    "confirmed_date": "2026-12-15",
+    "quantity_ordered": 500,
+    "quantity_confirmed": 500,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "factory holiday"
+  }
+]

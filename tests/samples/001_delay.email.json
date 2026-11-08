@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-001",
+  "from_addr": "sales@shenzhen-parts.example.com",
+  "subject": "Re: PO-2026-0412 confirmation",
+  "date": "2026-11-10",
+  "body_text": "Dear Alice,\n\nThank you for PO-2026-0412 (500 pcs). Due to a factory holiday our earliest ship date is now Dec 15 instead of Dec 1. Quantity unchanged.\n\nBest regards,\nLi Wei",
+  "attachments": [],
+  "thread_id": "t-001"
+}
