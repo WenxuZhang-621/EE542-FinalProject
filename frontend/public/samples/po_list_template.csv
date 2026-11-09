@@ -1,0 +1,2 @@
+po_number,supplier,supplier_email,item,quantity,unit_price,currency,sent_date,requested_ship_date
+PO-2026-0500,Example Supplier Ltd.,sales@example-supplier.com,Example item,1000,1.25,USD,2026-11-16,2026-12-15
