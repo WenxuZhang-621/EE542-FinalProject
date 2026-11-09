@@ -2,14 +2,28 @@
 
 Usage:
     python extract/extract.py --in data/emails.json --out data/extractions.json
+
+The model is reached through an OpenAI-compatible API, configured in .env:
+    LLM_API_KEY, LLM_MODEL, LLM_BASE_URL (empty = OpenAI)
+Moving to our own model on the cloud GPU (vLLM) only changes LLM_BASE_URL and LLM_MODEL.
 """
 import argparse
 import json
+import logging
+import os
 import sys
+import time
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from schema import EmailMessage, POExtraction, PO_EXTRACTION_JSON_SCHEMA  # noqa: E402
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+log = logging.getLogger("extract")
+
+MAX_ATTACHMENT_CHARS = 8000  # per attachment; long PDFs/sheets are cut to keep the prompt small
 
 SYSTEM_PROMPT = """You are an experienced procurement buyer at a small importer. You read one
 supplier email (and the text of its attachments) and record the status of every purchase
@@ -42,19 +56,80 @@ Rules for each item:
 Never guess a value the email does not support; use null instead."""
 
 # One email can mention several POs, so the model returns a list wrapped in an object.
-# schema.py stays unchanged; this only wraps its per-PO schema.
+# schema.py stays unchanged; this only wraps its per-PO schema. Strict structured output
+# needs every property listed as required (the optional ones are already nullable).
+_PO_ITEM_SCHEMA = {**PO_EXTRACTION_JSON_SCHEMA,
+                   "required": list(PO_EXTRACTION_JSON_SCHEMA["properties"])}
 RESPONSE_SCHEMA = {
     "type": "object",
-    "properties": {"orders": {"type": "array", "items": PO_EXTRACTION_JSON_SCHEMA}},
+    "properties": {"orders": {"type": "array", "items": _PO_ITEM_SCHEMA}},
     "required": ["orders"],
     "additionalProperties": False,
 }
 
+_client = None
+
+
+def model_name() -> str:
+    return os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        from openai import OpenAI
+
+        key = os.getenv("LLM_API_KEY")
+        if not key:
+            raise RuntimeError("LLM_API_KEY is not set. Copy .env.example to .env and fill it in.")
+        _client = OpenAI(api_key=key, base_url=os.getenv("LLM_BASE_URL") or None)
+    return _client
+
+
+def _user_message(msg: EmailMessage) -> str:
+    parts = [f"From: {msg.from_addr}", f"Subject: {msg.subject}", f"Date: {msg.date}", "",
+             msg.body_text]
+    for a in msg.attachments:
+        text = a.text[:MAX_ATTACHMENT_CHARS]
+        cut = " (truncated)" if len(a.text) > MAX_ATTACHMENT_CHARS else ""
+        parts += ["", f"--- Attachment: {a.filename}{cut} ---", text]
+    return "\n".join(parts)
+
+
+def _call_llm(msg: EmailMessage) -> dict:
+    # LLM_JSON_MODE=object for providers without json_schema support (e.g. some Qwen APIs).
+    if os.getenv("LLM_JSON_MODE", "schema") == "object":
+        fmt = {"type": "json_object"}
+    else:
+        fmt = {"type": "json_schema",
+               "json_schema": {"name": "po_extraction", "schema": RESPONSE_SCHEMA, "strict": True}}
+    resp = _get_client().chat.completions.create(
+        model=model_name(),
+        temperature=0,
+        response_format=fmt,
+        messages=[{"role": "system", "content": SYSTEM_PROMPT},
+                  {"role": "user", "content": _user_message(msg)}],
+    )
+    return json.loads(resp.choices[0].message.content)
+
 
 def extract_one(msg: EmailMessage) -> list[POExtraction]:
-    # TODO(P2): call LLM with SYSTEM_PROMPT + msg, structured output per RESPONSE_SCHEMA;
-    #           build each POExtraction from response["orders"] with source_email_id=msg.email_id
-    raise NotImplementedError("P2: implement LLM extraction")
+    """Extract every PO mentioned in one email. Retries once on a bad answer, then skips."""
+    for attempt in (1, 2):
+        try:
+            orders = _call_llm(msg)["orders"]
+            return [POExtraction.from_dict({**o, "source_email_id": msg.email_id}) for o in orders]
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+            log.warning("email %s: unusable answer (attempt %d): %s", msg.email_id, attempt, e)
+    log.error("email %s: skipped after 2 attempts", msg.email_id)
+    return []
+
+
+def extract_timed(msg: EmailMessage) -> tuple[list[POExtraction], float]:
+    """extract_one plus wall-clock seconds, used for the speed comparison later (API vs GPU)."""
+    t0 = time.perf_counter()
+    out = extract_one(msg)
+    return out, time.perf_counter() - t0
 
 
 def main() -> None:

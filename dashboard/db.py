@@ -34,9 +34,18 @@ CREATE TABLE IF NOT EXISTS events (
 """
 
 
+def reset(conn: sqlite3.Connection) -> None:
+    """Empty both tables (used by the demo's reset button)."""
+    conn.executescript("DELETE FROM events; DELETE FROM purchase_orders;")
+    conn.commit()
+
+
 def connect(path: str = DB_PATH) -> sqlite3.Connection:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    p = Path(path)
+    if not p.is_absolute():  # relative to the repo root, wherever the command runs from
+        p = Path(__file__).resolve().parents[1] / p
+    p.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(p)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA_SQL)
     return conn

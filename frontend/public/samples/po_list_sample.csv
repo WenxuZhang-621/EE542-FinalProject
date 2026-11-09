@@ -1,0 +1,8 @@
+po_number,supplier,supplier_email,item,quantity,unit_price,currency,sent_date,requested_ship_date
+PO-2026-0409,Pacific Fasteners,orders@pacific-fasteners.example.com,Flat washers,5000,0.03,USD,2026-11-13,2026-12-12
+PO-2026-0412,Shenzhen Parts Co.,sales@shenzhen-parts.example.com,PCB connectors,500,1.20,USD,2026-11-04,2026-12-01
+PO-2026-0445,HK Electronics,orders@hk-electronics.example.com,USB-C cables,800,1.10,USD,2026-11-09,2026-12-04
+PO-2026-0446,Ningbo Textile,trade@ningbo-textile.example.cn,Canvas fabric (m),600,2.90,USD,2026-11-12,2026-12-10
+PO-2026-0447,Coastal Packaging,sales@coastal-pack.example.com,Shipping cartons,"3,000",0.42,USD,11/10/2026,12/1/2026
+PO-2026-0448,Pacific Fasteners,orders@pacific-fasteners.example.com,M6 hex nuts,4000,0.05,USD,2026-11-13,2026-12-12
+PO-2026-0449,Delta Rubber,,Rubber gaskets,1500,0.30,USD,2026-11-11,2026-12-05
