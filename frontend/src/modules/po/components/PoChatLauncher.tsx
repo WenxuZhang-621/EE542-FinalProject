@@ -28,6 +28,7 @@ import {
     type Source,
 } from '../data/sample';
 import { usePoDemo } from '../store';
+import { usePoAuth } from '../auth';
 import { SourceChips } from './bits';
 
 type Msg = { role: 'user' | 'ai'; text: string; tools?: string[]; sources?: Source[] };
@@ -148,13 +149,15 @@ function Bubble({ m }: { m: Msg }) {
 
 export function PoChatLauncher() {
     const { orders } = usePoDemo();
+    const { user } = usePoAuth();
+    const firstName = user?.name.split(' ')[0] || 'there';
     const [open, setOpen] = React.useState(false);
     const [input, setInput] = React.useState('');
     const [busy, setBusy] = React.useState(false);
     const [msgs, setMsgs] = React.useState<Msg[]>([
         {
             role: 'ai',
-            text: "Hi Alice, I'm your senior expediter. I know every open PO, the supplier emails, and the team's playbook. Ask me anything about your orders.",
+            text: `Hi ${firstName}, I'm your senior expediter. I know every open PO, the supplier emails, and the team's playbook. Ask me anything about your orders.`,
         },
     ]);
     const end = React.useRef<HTMLDivElement>(null);

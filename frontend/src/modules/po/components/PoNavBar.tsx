@@ -1,12 +1,18 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
     AppBar,
-    Badge,
+    Avatar,
     Box,
+    ButtonBase,
     Container,
+    Divider,
+    ListItemIcon,
+    Menu,
+    MenuItem,
     Stack,
     Tab,
     Tabs,
@@ -14,10 +20,121 @@ import {
     Typography,
 } from '@mui/material';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import { BUYER, COMPANY } from '../data/sample';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
+import { usePoAuth } from '../auth';
 import { usePoDemo } from '../store';
 
-// Same structure as ChainSight's NavBar, with the PO pages and no login.
+function CountPill({ n }: { n: number }) {
+    if (!n) return null;
+    return (
+        <Box
+            component="span"
+            sx={{
+                ml: 0.75,
+                px: 0.75,
+                minWidth: 20,
+                height: 20,
+                borderRadius: 10,
+                bgcolor: 'primary.main',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: '20px',
+                textAlign: 'center',
+                display: 'inline-block',
+            }}
+        >
+            {n}
+        </Box>
+    );
+}
+
+function initials(name: string) {
+    return name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0]!.toUpperCase())
+        .join('');
+}
+
+function UserMenu() {
+    const router = useRouter();
+    const { user, logout } = usePoAuth();
+    const [anchor, setAnchor] = React.useState<HTMLElement | null>(null);
+    if (!user) return null;
+
+    return (
+        <>
+            <ButtonBase
+                onClick={(e) => setAnchor(e.currentTarget)}
+                aria-haspopup="menu"
+                aria-expanded={Boolean(anchor)}
+                sx={{ borderRadius: 2, px: 1, py: 0.75, '&:hover': { bgcolor: 'action.hover' } }}
+            >
+                <Stack direction="row" spacing={1.25} alignItems="center">
+                    <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: 14, fontWeight: 700 }}>
+                        {initials(user.name)}
+                    </Avatar>
+                    <Box sx={{ textAlign: 'left', display: { xs: 'none', sm: 'block' } }}>
+                        <Typography variant="body2" fontWeight={700} lineHeight={1.2}>
+                            {user.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {user.role} · {user.company}
+                        </Typography>
+                    </Box>
+                    <KeyboardArrowDownIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                </Stack>
+            </ButtonBase>
+            <Menu
+                anchorEl={anchor}
+                open={Boolean(anchor)}
+                onClose={() => setAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{ paper: { sx: { mt: 1, minWidth: 240, borderRadius: 2 } } }}
+            >
+                <Box sx={{ px: 2, py: 1.25 }}>
+                    <Typography fontWeight={700}>{user.name}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        {user.email}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        {user.role} · {user.company}
+                    </Typography>
+                </Box>
+                <Divider />
+                <MenuItem
+                    onClick={() => {
+                        setAnchor(null);
+                        window.location.reload();
+                    }}
+                >
+                    <ListItemIcon>
+                        <RestartAltOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    Reset sample data
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        setAnchor(null);
+                        logout();
+                        router.replace('/login');
+                    }}
+                >
+                    <ListItemIcon>
+                        <LogoutOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    Sign out
+                </MenuItem>
+            </Menu>
+        </>
+    );
+}
+
 export function PoNavBar() {
     const pathname = usePathname();
     const router = useRouter();
@@ -25,17 +142,18 @@ export function PoNavBar() {
     const toReview = drafts.filter((d) => d.state === 'review').length;
 
     const items = [
-        { label: 'Orders', href: '/orders' },
+        { label: <span>Orders</span>, href: '/orders' },
         {
             label: (
-                <Badge color="primary" badgeContent={toReview} sx={{ '& .MuiBadge-badge': { right: -10 } }}>
+                <span>
                     Follow-ups
-                </Badge>
+                    <CountPill n={toReview} />
+                </span>
             ),
             href: '/follow-ups',
         },
-        { label: 'Playbook', href: '/playbook' },
-        { label: 'Evaluation', href: '/evaluation' },
+        { label: <span>Playbook</span>, href: '/playbook' },
+        { label: <span>Evaluation</span>, href: '/evaluation' },
     ];
     const current = items.findIndex((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
 
@@ -53,17 +171,7 @@ export function PoNavBar() {
                         href="/orders"
                         sx={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 1, mr: 1, color: 'text.primary' }}
                     >
-                        <Box
-                            sx={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: 2,
-                                bgcolor: 'primary.main',
-                                color: '#fff',
-                                display: 'grid',
-                                placeItems: 'center',
-                            }}
-                        >
+                        <Box sx={{ width: 32, height: 32, borderRadius: 2, bgcolor: 'primary.main', color: '#fff', display: 'grid', placeItems: 'center' }}>
                             <Inventory2OutlinedIcon sx={{ fontSize: 19 }} />
                         </Box>
                         <Typography fontWeight={800} letterSpacing="-0.02em">
@@ -84,30 +192,9 @@ export function PoNavBar() {
                         ))}
                     </Tabs>
 
-                    <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
-                        <Typography variant="body2" fontWeight={700} lineHeight={1.2}>
-                            {BUYER}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            Buyer · {COMPANY}
-                        </Typography>
-                    </Box>
+                    <UserMenu />
                 </Toolbar>
             </Container>
         </AppBar>
-    );
-}
-
-export function DemoStrip() {
-    return (
-        <Box sx={{ bgcolor: 'secondary.main', color: '#fff', py: 0.5 }}>
-            <Container maxWidth="lg">
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="caption" fontWeight={600}>
-                        Front-end demo · sample data only · refresh the page to reset
-                    </Typography>
-                </Stack>
-            </Container>
-        </Box>
     );
 }

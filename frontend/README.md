@@ -4,7 +4,8 @@ Web UI for the PO follow-up assistant: TypeScript, Next.js 16, React 19, MUI 6.
 
 **Status: front-end demo.** Every page runs on sample data in `src/modules/po/data/sample.ts`
 (fictional companies on `example.com` domains). Nothing calls the Python pipeline yet, and
-the chat answers are scripted. Refreshing the page resets the demo.
+the chat answers are scripted. Refreshing the page (or **Reset sample data** in the user
+menu) resets the demo; you stay signed in.
 
 ## Run
 
@@ -22,6 +23,7 @@ pnpm dev          # http://localhost:3100
 
 | Route | What it shows |
 |---|---|
+| `/login`, `/signup` | Sign-in and sign-up. Front-end only for now: any email and password work, nothing is sent or stored except the profile in the browser. Every other page redirects here when signed out. |
 | `/orders` | Counts, the "needs attention" list, and every PO. **Import PO list** loads a CSV; **Sync inbox** simulates a new supplier email that turns PO-2026-0441 red. |
 | `/orders/[po]` | One PO: key facts, timeline, the latest email, and the fields the LLM extracted from it. |
 | `/follow-ups` | Follow-up emails drafted by the expediter clone, with the playbook rules and emails they cite. Approve, edit or reject; nothing is sent. |

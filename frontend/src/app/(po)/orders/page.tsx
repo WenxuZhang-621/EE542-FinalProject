@@ -27,7 +27,8 @@ import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutl
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import { StatCard } from '@/modules/po/components/StatCard';
 import { SectionCard, StatusChip } from '@/modules/po/components/bits';
-import { COMPANY, NEEDS_ATTENTION, fmtDate, summary, supplierOf } from '@/modules/po/data/sample';
+import { NEEDS_ATTENTION, fmtDate, summary, supplierOf } from '@/modules/po/data/sample';
+import { usePoAuth } from '@/modules/po/auth';
 import { usePoDemo } from '@/modules/po/store';
 
 const SEVERITY = ['delayed', 'out_of_stock', 'no_reply', 'price_change', 'partial'];
@@ -35,6 +36,7 @@ const SEVERITY = ['delayed', 'out_of_stock', 'no_reply', 'price_change', 'partia
 export default function OrdersPage() {
     const router = useRouter();
     const { orders, drafts, sync, justUpdated } = usePoDemo();
+    const { user } = usePoAuth();
     const [syncing, setSyncing] = React.useState(false);
     const [toast, setToast] = React.useState<string>();
     const [importOpen, setImportOpen] = React.useState(false);
@@ -63,7 +65,7 @@ export default function OrdersPage() {
                     </Typography>
                     <Typography variant="h4">Today · Nov 14</Typography>
                     <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                        {COMPANY} · {orders.length} open purchase orders with {new Set(orders.map((o) => o.supplierId)).size} suppliers
+                        {user?.company} · {orders.length} open purchase orders with {new Set(orders.map((o) => o.supplierId)).size} suppliers
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1.5}>

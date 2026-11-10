@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { PoAuthProvider } from '@/modules/po/auth';
 
 const theme = createTheme({
     palette: {
@@ -46,7 +47,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
-            {children}
+            <PoAuthProvider>{children}</PoAuthProvider>
         </ThemeProvider>
     );
 }
