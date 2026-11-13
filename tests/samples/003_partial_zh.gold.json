@@ -5,7 +5,7 @@
     "status": "partial",
     "change_type": "quantity_change",
     "source_email_id": "sample-003",
-    "original_date": "2026-11-28",
+    "original_date": null,
     "confirmed_date": "2026-11-28",
     "quantity_ordered": 800,
     "quantity_confirmed": 500,

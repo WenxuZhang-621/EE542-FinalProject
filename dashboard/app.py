@@ -49,7 +49,8 @@ def show_email(e: dict) -> None:
 
 
 def fmt_date(d):
-    return pd.to_datetime(d).strftime("%b %d") if d else "—"
+    # A delay with no new date yet arrives as None or NaN (e.g. "mid-December, day not set").
+    return "—" if d is None or pd.isna(d) else pd.to_datetime(d).strftime("%b %d")
 
 
 def num(v, missing="?") -> str:
@@ -137,6 +138,16 @@ with tab_po:
                 line = one_line(r)
                 (st.error if r["status"] in ("delayed", "out_of_stock") else st.warning)(line)
 
+        exc = pd.read_sql_query(
+            "SELECT po_number AS PO, kind AS Exception, detail AS Detail, "
+            "detected_at AS 'First seen', source_email_id AS Email "
+            "FROM exceptions ORDER BY po_number, kind", conn)
+        if len(exc):
+            st.subheader(f"Exceptions against the PO list ({len(exc)})")
+            st.caption("From rules.py: the supplier's latest update compared with the "
+                       "ordered date, quantity and price, plus orders with no reply.")
+            st.dataframe(exc, hide_index=True, width="stretch")
+
         st.subheader("All purchase orders")
         view = pd.DataFrame({
             "PO": df["po_number"],
@@ -207,10 +218,13 @@ with tab_acc:
         st.info("No accuracy test yet. Click **Run accuracy test** in the sidebar.")
     else:
         last = runs[-1]
-        c = st.columns(4)
-        prev = runs[-2] if len(runs) > 1 else None
+        c = st.columns(5)
+        # Only a run on the same emails is a fair comparison.
+        prev = next((x for x in reversed(runs[:-1]) if x["n_emails"] == last["n_emails"]), None)
         c[0].metric("Fields correct", f"{last['overall']:.0%}",
-                    delta=None if prev is None else f"{(last['overall'] - prev['overall']) * 100:+.0f} pts vs {prev['label']}")
+                    delta=None if prev is None else f"{(last['overall'] - prev['overall']) * 100:+.1f} pts vs {prev['label']}")
+        c[4].metric("On the 6 M1 emails",
+                    "—" if last["m1_overall"] is None else f"{last['m1_overall']:.0%}")
         c[1].metric("Test emails", last["n_emails"])
         c[2].metric("POs in the answers", f"{last['n_gold_pos'] - last['missed']} of {last['n_gold_pos']} found")
         c[3].metric("Seconds per email", f"{last['avg_seconds']:.1f}")
@@ -226,8 +240,10 @@ with tab_acc:
         st.subheader("Every run so far")
         hist = pd.DataFrame([{"Run": x["label"], "Time": x["time"], "Model": x["model"],
                               "Emails": x["n_emails"], "Fields correct": x["overall"],
+                              "On the 6 M1 emails": x["m1_overall"],
                               "Seconds per email": round(x["avg_seconds"], 2)} for x in runs])
         st.dataframe(hist, hide_index=True, width="stretch", column_config={
             "Fields correct": st.column_config.ProgressColumn(
                 "Fields correct", min_value=0.0, max_value=1.0, format="percent")})
-        st.caption(f"Stored in {RUNS_PATH.relative_to(ROOT)}; each milestone adds a row.")
+        st.caption(f"Stored in {RUNS_PATH.relative_to(ROOT)}; each milestone adds a row. Every run is "
+                   f"scored on the same {len(FIELDS)} fields with the current correct answers.")

@@ -4,6 +4,7 @@ Shared data contracts for the PO follow-up pipeline.
     ingest/   produces  EmailMessage
     extract/  consumes  EmailMessage, produces POExtraction
     dashboard/ consumes POExtraction
+    rules.py  consumes  POExtraction, produces POException
 
 Locked on Day 1. Changing any field requires agreement from all three module owners.
 """
@@ -96,6 +97,19 @@ class POExtraction:
         d["status"] = POStatus(d["status"])
         d["change_type"] = ChangeType(d["change_type"])
         return cls(**d)
+
+
+# --------------------------------------------------------------------------- #
+# rules -> dashboard / API
+# --------------------------------------------------------------------------- #
+
+@dataclass(frozen=True)
+class POException:
+    po_number: str
+    kind: str                      # delayed | partial | out_of_stock | price_change | no_reply
+    detail: str                    # one line, e.g. "2026-12-01 → 2026-12-15 (+14 days)"
+    detected_at: str               # ISO 8601, first time the exception was seen
+    source_email_id: Optional[str] = None
 
 
 # JSON schema handed to the LLM for structured output (extract/ uses this).

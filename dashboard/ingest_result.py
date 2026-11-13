@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from schema import ChangeType, POExtraction  # noqa: E402
+from schema import ChangeType, EmailMessage, POExtraction  # noqa: E402
 from db import connect  # noqa: E402
 
 COLUMNS = ["status", "original_date", "confirmed_date", "quantity_ordered",
@@ -54,6 +54,10 @@ def upsert(conn, ext: POExtraction) -> None:
         merged = {c: (new[c] if new[c] is not None else prev[c]) for c in COLUMNS}
         merged["original_date"] = prev["original_date"] or new["original_date"]
         merged["quantity_ordered"] = prev["quantity_ordered"] or new["quantity_ordered"]
+        if prev["sent_date"] and prev["unit_price"] is not None:
+            # Imported from the PO list: keep the ordered price as the baseline that
+            # rules.py compares against. The supplier's new price is in events/exceptions.
+            merged["unit_price"], merged["currency"] = prev["unit_price"], prev["currency"]
         conn.execute(
             "UPDATE purchase_orders SET " + ", ".join(f"{c} = ?" for c in COLUMNS)
             + ", last_email_id = ?, updated_at = CURRENT_TIMESTAMP WHERE po_number = ?",
@@ -65,6 +69,17 @@ def upsert(conn, ext: POExtraction) -> None:
         " VALUES (?, ?, ?, ?, ?, ?)",
         (ext.po_number, ext.change_type.value, _fmt(old), _fmt(val), ext.source_email_id,
          ext.notes),
+    )
+
+
+def save_extractions(conn, msg: EmailMessage, exts: list[POExtraction]) -> None:
+    """Keep every extraction from one email. Processing the same email again replaces it."""
+    conn.execute("DELETE FROM extractions WHERE source_email_id = ?", (msg.email_id,))
+    conn.executemany(
+        "INSERT INTO extractions (source_email_id, email_date, po_number, data)"
+        " VALUES (?, ?, ?, ?)",
+        [(msg.email_id, msg.date, e.po_number, json.dumps(e.to_dict(), ensure_ascii=False))
+         for e in exts],
     )
 
 

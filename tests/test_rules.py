@@ -3,11 +3,12 @@ from datetime import date
 import pytest
 
 from dashboard import db
+from dashboard.ingest_result import save_extractions, upsert
 from rules import (
-    EXCEPTIONS_SCHEMA_SQL,
     OrderTerms,
     evaluate_exceptions,
     refresh_exceptions,
+    sync_exceptions,
 )
 from schema import Attachment, ChangeType, EmailMessage, POExtraction, POStatus
 
@@ -117,7 +118,6 @@ def test_latest_reported_field_keeps_its_source():
 
 def test_repeated_sync_and_resolution(tmp_path):
     conn = db.connect(str(tmp_path / "test.sqlite"))
-    conn.executescript(EXCEPTIONS_SCHEMA_SQL)
     conn.executemany(
         "INSERT INTO purchase_orders (po_number, supplier, status) VALUES (?, ?, 'pending')",
         [(ORDER.po_number, "parts"), ("PO-200", "other")],
@@ -147,4 +147,73 @@ def test_repeated_sync_and_resolution(tmp_path):
     assert [
         tuple(row) for row in conn.execute("SELECT po_number, kind FROM exceptions")
     ] == [("PO-200", "no_reply")]
+    conn.close()
+
+
+def test_delay_without_a_new_date_is_still_flagged():
+    vague = update(status=POStatus.DELAYED, change_type=ChangeType.DATE_CHANGE)
+    (exception,) = evaluate_exceptions([ORDER], [vague], as_of=TUESDAY)
+    assert exception.kind == "delayed"
+    assert "not confirmed" in exception.detail
+    on_time = update("recovery-email", confirmed_date="2026-11-27")
+    assert not evaluate_exceptions([ORDER], [vague, on_time], as_of=TUESDAY)
+
+
+def test_partial_without_a_quantity_is_still_flagged():
+    (exception,) = evaluate_exceptions(
+        [ORDER], [update(status=POStatus.PARTIAL)], as_of=TUESDAY
+    )
+    assert exception.kind == "partial"
+    # A full quantity wins over a wrong "partial" label from the model.
+    full = update(status=POStatus.PARTIAL, quantity_confirmed=100)
+    assert not evaluate_exceptions([ORDER], [full], as_of=TUESDAY)
+
+
+def test_po_numbers_match_ignoring_case_and_spaces():
+    late = update(po_number=" po-100", confirmed_date="2026-12-11")
+    (exception,) = evaluate_exceptions([ORDER], [late], as_of=TUESDAY)
+    assert (exception.po_number, exception.kind) == ("PO-100", "delayed")
+    assert not evaluate_exceptions(
+        [ORDER], [], emails=[reply(body="po-100 received")], as_of=TUESDAY
+    )
+
+
+def test_price_ignores_rounding_noise_and_currency_aliases():
+    assert not evaluate_exceptions(
+        [ORDER], [update(unit_price=2.4000001, currency="usd")], as_of=TUESDAY
+    )
+    yuan = OrderTerms("PO-100", None, None, 100, 31.5, "CNY")
+    assert not evaluate_exceptions(
+        [yuan], [update(unit_price=31.5, currency="RMB")], as_of=TUESDAY
+    )
+    (exception,) = evaluate_exceptions(
+        [ORDER], [update(unit_price=2.41, currency="USD")], as_of=TUESDAY
+    )
+    assert exception.kind == "price_change"
+
+
+def test_sync_replays_stored_history_and_reset_clears_it(tmp_path):
+    conn = db.connect(str(tmp_path / "test.sqlite"))
+    conn.execute(
+        "INSERT INTO purchase_orders (po_number, supplier, status, quantity_ordered,"
+        " unit_price, currency, sent_date, requested_date)"
+        " VALUES ('PO-100', 'parts', 'pending', 100, 2.4, 'USD', '2026-11-06', '2026-11-27')"
+    )
+    email = reply(subject="Re: PO-100")
+    late = update(email.email_id, confirmed_date="2026-12-11", unit_price=2.65, currency="USD")
+    save_extractions(conn, email, [late])
+    upsert(conn, late)
+    first = {e.kind for e in sync_exceptions(conn, emails=[email], as_of=TUESDAY)}
+    assert first == {"delayed", "price_change"}
+    # The imported price stays as the baseline, and a sync with no new email changes nothing.
+    assert conn.execute("SELECT unit_price FROM purchase_orders").fetchone()[0] == 2.4
+    again = {e.kind for e in sync_exceptions(conn, emails=[email], as_of=TUESDAY)}
+    assert again == first
+    assert conn.execute("SELECT COUNT(*) FROM exceptions").fetchone()[0] == 2
+    # Processing the same email twice does not duplicate its history.
+    save_extractions(conn, email, [late])
+    assert conn.execute("SELECT COUNT(*) FROM extractions").fetchone()[0] == 1
+    db.reset(conn)
+    for table in ("purchase_orders", "events", "extractions", "exceptions"):
+        assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
     conn.close()

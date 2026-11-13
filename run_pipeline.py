@@ -1,4 +1,4 @@
-"""Run the whole pipeline with one command: emails -> LLM extraction -> SQLite.
+"""Run the whole pipeline with one command: emails -> LLM extraction -> SQLite -> rules.
 
 Usage:
     python run_pipeline.py --offline tests/samples --reset   # read a folder of *.email.json
@@ -19,7 +19,8 @@ for p in (ROOT, ROOT / "extract", ROOT / "dashboard"):
 from schema import EmailMessage  # noqa: E402
 from extract import extract_timed  # noqa: E402
 import db  # noqa: E402
-from ingest_result import upsert  # noqa: E402
+from ingest_result import save_extractions, upsert  # noqa: E402
+from rules import sync_exceptions  # noqa: E402
 
 EMAILS_OUT = ROOT / "data" / "emails.json"
 EXTRACTIONS_OUT = ROOT / "data" / "extractions.json"
@@ -46,6 +47,7 @@ def run(msgs: list[EmailMessage], reset: bool = False, on_email=None) -> dict:
             on_email(i, len(msgs), m)
         exts, sec = extract_timed(m)
         seconds.append(sec)
+        save_extractions(conn, m, exts)
         for e in exts:
             results.append(e.to_dict())
             if e.po_number:
@@ -60,7 +62,11 @@ def run(msgs: list[EmailMessage], reset: bool = False, on_email=None) -> dict:
     EMAILS_OUT.write_text(json.dumps(list(known.values()), ensure_ascii=False, indent=2),
                           encoding="utf-8")
     EXTRACTIONS_OUT.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"emails": len(msgs), "pos": len(results),
+
+    # Every known email counts as a reply for the no-reply rule, not just this batch.
+    found = sync_exceptions(conn, emails=[EmailMessage.from_dict(d) for d in known.values()])
+    conn.commit()
+    return {"emails": len(msgs), "pos": len(results), "exceptions": len(found),
             "avg_seconds": sum(seconds) / max(len(seconds), 1)}
 
 
@@ -76,6 +82,7 @@ def main() -> None:
     s = run(msgs, reset=args.reset,
             on_email=lambda i, n, m: print(f"[{i + 1}/{n}] {m.email_id}  {m.subject}"))
     print(f"done: {s['emails']} emails -> {s['pos']} PO updates, "
+          f"{s['exceptions']} open exceptions, "
           f"avg {s['avg_seconds']:.1f}s per email")
 
 

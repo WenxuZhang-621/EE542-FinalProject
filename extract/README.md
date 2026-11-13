@@ -11,17 +11,27 @@ python extract/eval.py --label M2-api
 python -m pytest tests/test_rules.py
 ```
 
-The evaluator scores eight fields on the 20 sample emails and records missed and extra
+The evaluator scores ten fields on the 20 sample emails and records missed and extra
 POs separately. It appends each run and its individual predictions to
 `data/eval_runs.jsonl`. The same 20 emails were used to tune the prompt.
 
-- **M1 replay** (`M1-local-replay`): 92.9% across 6 emails with the M1 prompt.
-- **M2 baseline** (`M2-local-baseline`): 88.6% across 20 emails with the M1 prompt.
-- **M2 current** (`M2-local-v4`): 89.2% across 20 emails with the M2 prompt, with one
-  missed order, zero extra orders, and 3.42 seconds per email on average.
+Stored runs are scored again on load with the current fields and gold answers, so runs
+from different milestones stay comparable. Each run also reports its accuracy on
+samples 001–006 alone, the whole M1 set.
 
-These three runs used local Qwen3-8B Q4_K_M served by llama.cpp. Use the two 20-email
-runs to compare prompts. The 6-email replay used a smaller set.
+| Run | Prompt | 20 emails | Samples 001–006 |
+|---|---|---|---|
+| `M2-local-baseline` | M1 | 88.6% | 91.4% |
+| `M2-local-v4` | M2 | 90.5% | 94.3% |
+
+The M2 run missed one order, returned no extra orders, and took 3.42 seconds per email
+on average. These figures come from scoring the stored predictions again after two
+changes: `unit_price` and `currency` are now scored, and the gold answer for sample 003
+no longer states an original date that the email does not give. The prompt has since
+gained the words "a JSON object" for `LLM_JSON_MODE=object`, so run the evaluation once
+more before quoting a final number.
+
+These runs used local Qwen3-8B Q4_K_M served by llama.cpp.
 
 To reproduce the local run with the [Qwen GGUF model](https://huggingface.co/Qwen/Qwen3-8B-GGUF),
 start llama.cpp b12336 on the loopback address in one terminal.
@@ -46,30 +56,39 @@ For the team's Qwen3-8B on vLLM, set `LLM_BASE_URL=http://localhost:8001/v1`,
 
 ## After inbox sync
 
-The rules in `rules.py` compare supplier updates with the original order terms. After
-the team agrees on the shared database, include `EXCEPTIONS_SCHEMA_SQL` in its
-initialization. Its table has one active row per PO and exception kind.
+The rules in `rules.py` compare supplier updates with the original order terms and keep
+one active row per PO and exception kind in the `exceptions` table. `run_pipeline.py`
+already does this after every run. Any other entry point, such as the API's sync
+endpoint, needs three calls.
 
 ```python
-from rules import OrderTerms, refresh_exceptions
+from ingest_result import save_extractions, upsert
+from rules import sync_exceptions
 
-orders = [
-    OrderTerms(
-        po_number=row["po_number"],
-        requested_date=row["requested_date"],
-        sent_date=row["sent_date"],
-        quantity=row["quantity"],
-        unit_price=row["unit_price"],
-        currency=row["currency"],
-    )
-    for row in original_orders
-]
-with conn:
-    refresh_exceptions(conn, orders, extractions, emails=inbound_emails)
+for email in new_emails:
+    extractions = extract_one(email)
+    save_extractions(conn, email, extractions)   # history that the rules replay
+    for extraction in extractions:
+        if extraction.po_number:
+            upsert(conn, extraction)
+sync_exceptions(conn, emails=all_inbound_emails)
+conn.commit()
 ```
 
-Map the CSV column `requested_ship_date` to `requested_date` on import. Pass the
-original order terms, all known extractions in chronological order, and inbound
-emails for the orders being refreshed. This retains an earlier delay when a later
-message only changes price and recognizes replies even when extraction yields no
-order.
+`sync_exceptions` reads order terms from `purchase_orders` and every stored extraction
+from `extractions`, so a sync that brings no new email keeps earlier exceptions. Pass
+all known inbound supplier emails, not only the new ones and not the buyer's own sent
+mail: any email that mentions a PO number counts as a reply for the no-reply rule.
+
+The PO list import must fill these `purchase_orders` columns.
+
+| Column | From the PO list |
+|---|---|
+| `sent_date` | `sent_date`; also marks the row as imported |
+| `requested_date` | `requested_ship_date` |
+| `quantity_ordered` | `quantity` |
+| `unit_price`, `currency` | ordered price; later supplier prices do not overwrite it |
+
+Known limits: an email with no PO number cannot be tied to an order, so that order can
+still show as no reply. PO numbers match regardless of case and spaces, but "PO 100"
+does not match "PO-100".

@@ -30,9 +30,10 @@ Read the subject, the latest message body, and the attached text. Ignore quoted 
 messages (lines starting with ">", or replies after "On ... wrote:" or "-----原始邮件-----").
 Attachments can contain the entire update even if the body just says to see the attachment.
 
-Return {"orders": [...]} with one item per order that has an update. For unrelated mail,
-return {"orders": []}. For each order, copy its PO number verbatim from the input, or set
-po_number to null if it has no explicit PO number. Never build a PO number from other text.
+Return a JSON object {"orders": [...]} with one item per order that has an update. For
+unrelated mail, return {"orders": []}. For each order, copy its PO number verbatim from the
+input, or set po_number to null if it has no explicit PO number. Never build a PO number
+from other text.
 
 - supplier: everything after the @ in From, including all subdomains.
 - original_date: the previously agreed ship date if stated. A newly stated date alone is
