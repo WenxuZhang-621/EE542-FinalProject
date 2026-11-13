@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-009",
+  "from_addr": "sales@maple-cartons.example.com",
+  "subject": "Re: PO-2026-0452",
+  "date": "2026-11-12",
+  "body_text": "Hi Alice,\n\nAll 900 cartons on PO-2026-0452 will ship on the agreed November 25 date. Thanks for checking.\n\nOn Nov 10, 2026, I wrote:\n> PO-2026-0452 may slip to Dec 2.\n> For PO-2026-0100, I can ship only 100 of 200 units.",
+  "attachments": [],
+  "thread_id": "t-009"
+}

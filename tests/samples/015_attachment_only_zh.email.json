@@ -1,0 +1,15 @@
+{
+  "email_id": "sample-015",
+  "from_addr": "sales@kunshan-bearings.example.cn",
+  "subject": "轴承供货确认单",
+  "date": "2026-11-12",
+  "body_text": "刘经理您好，订单更新请查收附件，收到后请回复。谢谢。",
+  "attachments": [
+    {
+      "filename": "供货确认单.pdf",
+      "text": "采购单号：PO-2026-0459\n订购数量：1000 套\n原约定发货日期：2026-12-01\n确认发货：2026-12-01 先发 650 套\n剩余 350 套尚在等热处理，发货时间未定。",
+      "mime_type": "application/pdf"
+    }
+  ],
+  "thread_id": "t-015"
+}

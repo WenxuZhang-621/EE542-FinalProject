@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-014",
+  "from_addr": "sales@ningbo-motors.example.cn",
+  "subject": "回复：PO-2026-0458 交期确认",
+  "date": "2026-11-12",
+  "body_text": "王经理，标题这单确认按原计划 11 月 27 日发出，订单 180 台电机全部一起发。\n\n-----原始邮件-----\n我们此前预估 PO-2026-0458 可能推迟到 12 月 7 日，先发 100 台。另一单 PO-2026-0101 还在等排产。",
+  "attachments": [],
+  "thread_id": "t-014"
+}

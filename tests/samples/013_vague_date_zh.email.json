@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-013",
+  "from_addr": "sales@suzhou-cables.example.cn",
+  "subject": "PO-2026-0457 排产变更",
+  "date": "2026-11-12",
+  "body_text": "陈经理，PO-2026-0457 共 700 条线束，原定 11 月 30 日发。线材到货晚了，现在只能推迟到 12 月中旬，具体哪天还没定。700 条会一次发齐。",
+  "attachments": [],
+  "thread_id": "t-013"
+}

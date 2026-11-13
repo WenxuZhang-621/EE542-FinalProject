@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-018",
+  "from_addr": "sales@qingdao-gaskets.example.cn",
+  "subject": "PO-2026-0461 分批发货",
+  "date": "2026-11-12",
+  "body_text": "李经理，PO-2026-0461 您订了 2,400 个垫圈。我们确认 11/30 先发 1,600 个，其余 800 个要等胶料到齐，交期暂时无法确认。",
+  "attachments": [],
+  "thread_id": "t-018"
+}

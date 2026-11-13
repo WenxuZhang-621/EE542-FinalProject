@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-020",
+  "from_addr": "sales@changzhou-valves.example.cn",
+  "subject": "两张采购单的更新",
+  "date": "2026-11-12",
+  "body_text": "王经理好，两个订单分别回复如下：\nPO-2026-0462：原单价人民币 31.50 元，现需改为人民币 32.80 元。原定的 12 月 8 日照常发，订的 500 件全部发出。\nPO-2026-0463：订购 900 件，11 月 26 日确认先发 640 件，余量仍待排产。",
+  "attachments": [],
+  "thread_id": "t-020"
+}

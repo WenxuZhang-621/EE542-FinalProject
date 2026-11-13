@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-008",
+  "from_addr": "sales@atlas-castings.example.com",
+  "subject": "Schedule update | PO-2026-0451",
+  "date": "2026-11-12",
+  "body_text": "Alice,\n\nPO-2026-0451 was due to ship Nov 30th. The coating line is down, so all 450 housings will ship Dec 15th instead.\n\nRegards,\nJon",
+  "attachments": [],
+  "thread_id": "t-008"
+}

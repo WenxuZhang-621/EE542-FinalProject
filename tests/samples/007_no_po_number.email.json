@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-007",
+  "from_addr": "sales@summit-pumps.example.com",
+  "subject": "Update on your valve order",
+  "date": "2026-11-12",
+  "body_text": "Hi Alice,\n\nWe can't source the valves on your order. We have zero available against the 240 units you ordered. Our mill has discontinued that grade.\n\nBest,\nMia",
+  "attachments": [],
+  "thread_id": "t-007"
+}

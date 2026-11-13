@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0453",
+    "supplier": "clearwater-packaging.example.com",
+    "status": "delayed",
+    "change_type": "date_change",
+    "source_email_id": "sample-010",
+    "original_date": "2026-12-02",
+    "confirmed_date": "2026-12-16",
+    "quantity_ordered": 1200,
+    "quantity_confirmed": 1200,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "awaiting new print plates"
+  }
+]

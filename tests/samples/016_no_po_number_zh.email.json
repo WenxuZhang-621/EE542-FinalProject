@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-016",
+  "from_addr": "sales@foshan-ceramics.example.cn",
+  "subject": "样品和大货排产",
+  "date": "2026-11-12",
+  "body_text": "您好，您上周订的 360 块地砖，排产还没定，交期和可发数量要下周才能确认。先跟您同步一下进度。",
+  "attachments": [],
+  "thread_id": "t-016"
+}

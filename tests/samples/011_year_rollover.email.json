@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-011",
+  "from_addr": "sales@lakeside-pcb.example.com",
+  "subject": "Re: PO-2026-0454 delivery window",
+  "date": "2026-12-21",
+  "body_text": "Hi Alice,\n\nFor PO-2026-0454, the full order of 320 boards was due to ship Dec 29. It will now ship Jan 5 due to the plant shutdown.\n\nElla",
+  "attachments": [],
+  "thread_id": "t-011"
+}

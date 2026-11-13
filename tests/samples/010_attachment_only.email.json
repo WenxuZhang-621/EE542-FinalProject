@@ -1,0 +1,15 @@
+{
+  "email_id": "sample-010",
+  "from_addr": "sales@clearwater-packaging.example.com",
+  "subject": "Updated shipment worksheet",
+  "date": "2026-11-12",
+  "body_text": "Hello,\n\nPlease see the attached worksheet for our latest update.\n\nRosa",
+  "attachments": [
+    {
+      "filename": "shipment_update.xlsx",
+      "text": "PO Number | Original ship date | Confirmed ship date | Ordered qty | Confirmed qty | Reason\nPO-2026-0453 | 2026-12-02 | 2026-12-16 | 1200 | 1200 | Awaiting new print plates",
+      "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    }
+  ],
+  "thread_id": "t-010"
+}

@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-019",
+  "from_addr": "sales@xiamen-tools.example.cn",
+  "subject": "工厂开放日邀请",
+  "date": "2026-11-12",
+  "body_text": "您好！本月 26 日下午两点我们将举办工厂开放日，会有设备参观和新品展示。欢迎报名，名额 30 人。",
+  "attachments": [],
+  "thread_id": "t-019"
+}

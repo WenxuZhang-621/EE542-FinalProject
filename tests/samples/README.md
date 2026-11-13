@@ -1,3 +1,6 @@
-Each sample = `<name>.email.json` (EmailMessage) + `<name>.gold.json` (list of POExtraction).
-Target for Week 1: 20 samples covering confirmed / delayed / partial / out_of_stock / price_change,
-half English, half Chinese. Synthetic or anonymized only.
+Each sample pairs an `<name>.email.json` (`EmailMessage`) with an
+`<name>.gold.json` (the expected `POExtraction` rows). The M2 set has 20 synthetic
+emails, 10 in English and 10 in Chinese. Samples 001–006 are the original M1 set.
+
+The new samples cover missing PO numbers, approximate dates and year rollover, quoted
+replies, attachment-only updates, multiple POs, and unrelated mail.

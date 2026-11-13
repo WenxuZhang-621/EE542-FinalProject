@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-012",
+  "from_addr": "sales@redwood-components.example.com",
+  "subject": "Availability on two open orders",
+  "date": "2026-11-12",
+  "body_text": "Hi Alice,\n\nPO-2026-0455: we can ship 300 out of the 500 ordered fittings on Nov 24. No date for the balance yet.\nPO-2026-0456: the ordered 100 connectors are discontinued. We have no stock and cannot ship any of them.\n\nThanks,\nNina",
+  "attachments": [],
+  "thread_id": "t-012"
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0461",
+    "supplier": "qingdao-gaskets.example.cn",
+    "status": "partial",
+    "change_type": "quantity_change",
+    "source_email_id": "sample-018",
+    "original_date": null,
+    "confirmed_date": "2026-11-30",
+    "quantity_ordered": 2400,
+    "quantity_confirmed": 1600,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "remaining 800 awaiting material"
+  }
+]

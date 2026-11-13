@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0451",
+    "supplier": "atlas-castings.example.com",
+    "status": "delayed",
+    "change_type": "date_change",
+    "source_email_id": "sample-008",
+    "original_date": "2026-11-30",
+    "confirmed_date": "2026-12-15",
+    "quantity_ordered": 450,
+    "quantity_confirmed": 450,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "coating line down"
+  }
+]

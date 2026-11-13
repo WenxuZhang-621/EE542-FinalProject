@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0459",
+    "supplier": "kunshan-bearings.example.cn",
+    "status": "partial",
+    "change_type": "quantity_change",
+    "source_email_id": "sample-015",
+    "original_date": "2026-12-01",
+    "confirmed_date": "2026-12-01",
+    "quantity_ordered": 1000,
+    "quantity_confirmed": 650,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "350 units awaiting heat treatment"
+  }
+]

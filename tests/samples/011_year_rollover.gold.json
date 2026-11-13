@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0454",
+    "supplier": "lakeside-pcb.example.com",
+    "status": "delayed",
+    "change_type": "date_change",
+    "source_email_id": "sample-011",
+    "original_date": "2026-12-29",
+    "confirmed_date": "2027-01-05",
+    "quantity_ordered": 320,
+    "quantity_confirmed": 320,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "plant shutdown"
+  }
+]

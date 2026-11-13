@@ -1,0 +1,9 @@
+{
+  "email_id": "sample-017",
+  "from_addr": "sales@wuxi-relays.example.cn",
+  "subject": "PO-2026-0460 提前发货",
+  "date": "2026-11-12",
+  "body_text": "孙经理好，PO-2026-0460 的 750 只继电器原定 12 月 9 日发货。产线腾出一班，确认 12 月 4 日就可以全部发出，数量不变。",
+  "attachments": [],
+  "thread_id": "t-017"
+}

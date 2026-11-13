@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0457",
+    "supplier": "suzhou-cables.example.cn",
+    "status": "delayed",
+    "change_type": "date_change",
+    "source_email_id": "sample-013",
+    "original_date": "2026-11-30",
+    "confirmed_date": null,
+    "quantity_ordered": 700,
+    "quantity_confirmed": 700,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "material delay; exact ship date not confirmed"
+  }
+]

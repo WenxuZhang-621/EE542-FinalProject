@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0460",
+    "supplier": "wuxi-relays.example.cn",
+    "status": "confirmed",
+    "change_type": "date_change",
+    "source_email_id": "sample-017",
+    "original_date": "2026-12-09",
+    "confirmed_date": "2026-12-04",
+    "quantity_ordered": 750,
+    "quantity_confirmed": 750,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "production slot freed"
+  }
+]

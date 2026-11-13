@@ -5,7 +5,7 @@ Usage:
 
 The model is reached through an OpenAI-compatible API, configured in .env:
     LLM_API_KEY, LLM_MODEL, LLM_BASE_URL (empty = OpenAI)
-Moving to our own model on the cloud GPU (vLLM) only changes LLM_BASE_URL and LLM_MODEL.
+Set LLM_DISABLE_THINKING=1 for Qwen3 served by vLLM.
 """
 import argparse
 import json
@@ -25,35 +25,40 @@ log = logging.getLogger("extract")
 
 MAX_ATTACHMENT_CHARS = 8000  # per attachment; long PDFs/sheets are cut to keep the prompt small
 
-SYSTEM_PROMPT = """You are an experienced procurement buyer at a small importer. You read one
-supplier email (and the text of its attachments) and record the status of every purchase
-order (PO) it mentions. The email may be in English or Chinese.
+SYSTEM_PROMPT = """Extract purchase-order (PO) updates from one English or Chinese supplier email.
+Read the subject, the latest message body, and the attached text. Ignore quoted earlier
+messages (lines starting with ">", or replies after "On ... wrote:" or "-----原始邮件-----").
+Attachments can contain the entire update even if the body just says to see the attachment.
 
-Use only the newest message. Ignore earlier messages quoted below it (lines starting with
-">", or text after "On ... wrote:" or "-----原始邮件-----"), because they hold old dates.
+Return {"orders": [...]} with one item per order that has an update. For unrelated mail,
+return {"orders": []}. For each order, copy its PO number verbatim from the input, or set
+po_number to null if it has no explicit PO number. Never build a PO number from other text.
 
-Answer with a JSON object {"orders": [...]}, one item per PO mentioned in the email.
-Rules for each item:
-- po_number: copy exactly as written, e.g. "PO-2026-0412". If no PO number is given, use null.
-- supplier: the domain of the sender's email address, e.g. "shenzhen-parts.example.com".
-- Dates use ISO 8601 (YYYY-MM-DD). If the year is missing, use the year of the email date;
-  if that would put the date before the email date, use the next year.
-- original_date: the ship date agreed before this email. confirmed_date: the ship date the
-  supplier now commits to. Use null for any date the email does not give.
-- status: pick the first that applies, in this order:
-  out_of_stock  the supplier cannot supply at all (quantity_confirmed = 0)
-  partial       the supplier can ship only part of the quantity
-  delayed       confirmed_date is later than original_date
-  price_change  the supplier changed the unit price
-  confirmed     date and quantity as ordered
-  pending       nothing is confirmed yet
-- change_type: the main change this email makes: none, date_change, quantity_change,
-  price_change, cancellation or other.
-- quantity_ordered, quantity_confirmed: numbers only, no units.
-- unit_price, currency: only if the email states a price; currency as an ISO code, e.g. "USD".
-- notes: the supplier's reason in a few English words, e.g. "factory holiday"; "" if none.
-- confidence: 0 to 1, how sure you are about this item.
-Never guess a value the email does not support; use null instead."""
+- supplier: everything after the @ in From, including all subdomains.
+- original_date: the previously agreed ship date if stated. A newly stated date alone is
+  not the original date. If a date is explicitly unchanged, use it in both date fields.
+- confirmed_date: the exact committed date for quantity_confirmed. For a partial
+  shipment, use the date of the first confirmed batch and ignore estimates for the
+  remaining units. A date without a specific day is null. Use YYYY-MM-DD for exact dates.
+  For an exact month/day without a year, use the email year, rolling into the next year
+  if that date would already have passed. Never use the email date as a ship date by default.
+- quantity_ordered: the quantity the buyer ordered. quantity_confirmed: the quantity the
+  supplier can ship now or in the confirmed shipment. "All" or "quantity unchanged" means
+  the full ordered quantity if known. Use 0 when the supplier cannot ship any units.
+- unit_price: the current per-unit price. When a price changes, use the new price, not the
+  old one or the total. Use an ISO currency code when stated or unambiguous.
+- status: choose the first that applies: out_of_stock (cannot supply any), partial (can
+  supply only some), delayed (ships later or explicitly postponed), price_change (new unit
+  price), confirmed (the shipment is confirmed, even if earlier), pending (still awaiting
+  confirmation). An earlier date is not a delay.
+- change_type: the main update: quantity_change for shortages including zero units,
+  date_change for a moved ship date, price_change for a new price, cancellation only when
+  the order is explicitly cancelled, none for unchanged or pending terms, or other.
+- notes: a short reason in English, or an empty string. confidence: a number from 0 to 1.
+Use null for any unsupported dates, quantities, prices, or currency.
+
+Example: "Production is still being scheduled for the 120 units you ordered." This is
+one pending order with po_number null, quantity_ordered 120, and quantity_confirmed null."""
 
 # One email can mention several POs, so the model returns a list wrapped in an object.
 # schema.py stays unchanged; this only wraps its per-PO schema. Strict structured output
@@ -103,12 +108,16 @@ def _call_llm(msg: EmailMessage) -> dict:
     else:
         fmt = {"type": "json_schema",
                "json_schema": {"name": "po_extraction", "schema": RESPONSE_SCHEMA, "strict": True}}
+    options = {}
+    if os.getenv("LLM_DISABLE_THINKING") == "1":
+        options["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
     resp = _get_client().chat.completions.create(
         model=model_name(),
         temperature=0,
         response_format=fmt,
         messages=[{"role": "system", "content": SYSTEM_PROMPT},
                   {"role": "user", "content": _user_message(msg)}],
+        **options,
     )
     return json.loads(resp.choices[0].message.content)
 

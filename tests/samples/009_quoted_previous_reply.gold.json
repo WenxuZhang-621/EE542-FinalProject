@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-2026-0452",
+    "supplier": "maple-cartons.example.com",
+    "status": "confirmed",
+    "change_type": "none",
+    "source_email_id": "sample-009",
+    "original_date": "2026-11-25",
+    "confirmed_date": "2026-11-25",
+    "quantity_ordered": 900,
+    "quantity_confirmed": 900,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": ""
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "po_number": "PO-2026-0462",
+    "supplier": "changzhou-valves.example.cn",
+    "status": "price_change",
+    "change_type": "price_change",
+    "source_email_id": "sample-020",
+    "original_date": "2026-12-08",
+    "confirmed_date": "2026-12-08",
+    "quantity_ordered": 500,
+    "quantity_confirmed": 500,
+    "unit_price": 32.8,
+    "currency": "CNY",
+    "confidence": 0.9,
+    "notes": ""
+  },
+  {
+    "po_number": "PO-2026-0463",
+    "supplier": "changzhou-valves.example.cn",
+    "status": "partial",
+    "change_type": "quantity_change",
+    "source_email_id": "sample-020",
+    "original_date": null,
+    "confirmed_date": "2026-11-26",
+    "quantity_ordered": 900,
+    "quantity_confirmed": 640,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "remaining 260 awaiting production"
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": null,
+    "supplier": "foshan-ceramics.example.cn",
+    "status": "pending",
+    "change_type": "none",
+    "source_email_id": "sample-016",
+    "original_date": null,
+    "confirmed_date": null,
+    "quantity_ordered": 360,
+    "quantity_confirmed": null,
+    "unit_price": null,
+    "currency": null,
+    "confidence": 0.9,
+    "notes": "production schedule not confirmed"
+  }
+]
