@@ -43,20 +43,18 @@ or skipped with the reason. A new PO with no supplier reply 2 or more business d
 template is in `public/samples/po_list_template.csv`. Excel files are left to the Python
 side (`ingest/po_import.py`, openpyxl).
 
-## Connecting to the Python backend (next step)
+## Python backend
 
-The plan is a small FastAPI app that reads the SQLite database the pipeline writes, with
-Next.js forwarding `/api/*` to it in development:
+`next.config.ts` forwards `/api/*` to the FastAPI app (`uvicorn api.main:app --port 8000`, see
+`api/README.md`). On load `store.tsx` calls `GET /api/orders`; if that fails the pages fall back to
+the bundled sample data and show a banner saying so.
 
-| Endpoint | Replaces |
+| Live (backend running) | Still sample data |
 |---|---|
-| `GET /api/orders`, `GET /api/orders/{po}` | `ORDERS` in `sample.ts` |
-| `POST /api/po-list` | `importOrders` in `store.tsx` |
-| `POST /api/sync` | `sync` in `store.tsx` (fetch emails, extract, flag) |
-| `GET /api/drafts`, `POST /api/drafts/{id}/approve` | `DRAFTS`, `approve` |
-| `POST /api/chat` | `answer()` in `PoChatLauncher.tsx` |
+| Orders, order detail, **Import PO list** (`POST /api/po-list`), **Sync inbox** (`POST /api/sync`), Evaluation (`GET /api/eval-runs`) | Follow-up drafts, Playbook, chat (M3) |
 
-Pages can be switched one at a time; all data access already goes through `store.tsx`.
+Without an LLM key the backend cannot extract, so **Sync inbox** asks for the labelled demo mode
+(reference answers for the sample inbox) and the toast says "reference answers".
 
 ## Layout
 

@@ -26,7 +26,7 @@ import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import { StatCard } from '@/modules/po/components/StatCard';
-import { SectionCard, StatusChip } from '@/modules/po/components/bits';
+import { SampleBanner, SectionCard, StatusChip } from '@/modules/po/components/bits';
 import { NEEDS_ATTENTION, fmtDate, summary, supplierOf } from '@/modules/po/data/sample';
 import { usePoAuth } from '@/modules/po/auth';
 import { usePoDemo } from '@/modules/po/store';
@@ -35,7 +35,7 @@ const SEVERITY = ['delayed', 'out_of_stock', 'no_reply', 'price_change', 'partia
 
 export default function OrdersPage() {
     const router = useRouter();
-    const { orders, drafts, sync, justUpdated } = usePoDemo();
+    const { orders, drafts, sync, justUpdated, live, offlineReason } = usePoDemo();
     const { user } = usePoAuth();
     const [syncing, setSyncing] = React.useState(false);
     const [toast, setToast] = React.useState<string>();
@@ -51,9 +51,20 @@ export default function OrdersPage() {
 
     const onSync = async () => {
         setSyncing(true);
-        const n = await sync();
-        setSyncing(false);
-        setToast(n ? '1 new supplier email · PO-2026-0441 is now delayed' : 'No new supplier emails');
+        try {
+            const r = await sync();
+            const where = r.source === 'gmail' ? 'Gmail' : r.source === 'gold' ? 'sample inbox (reference answers)' : 'sample inbox';
+            setToast(
+                r.newEmails
+                    ? `${r.newEmails} new supplier ${r.newEmails === 1 ? 'email' : 'emails'} from ${where}` +
+                          (r.changed.length ? ` · ${r.changed.length} ${r.changed.length === 1 ? 'order' : 'orders'} changed: ${r.changed.slice(0, 3).join(', ')}` : '')
+                    : `No new supplier emails in ${where}`,
+            );
+        } catch (e) {
+            setToast(`Sync failed: ${(e as Error).message}`);
+        } finally {
+            setSyncing(false);
+        }
     };
 
     return (
@@ -77,6 +88,7 @@ export default function OrdersPage() {
                     </Button>
                 </Stack>
             </Stack>
+            {!live && <SampleBanner text={offlineReason ?? 'Showing bundled sample data.'} />}
             <ImportPoDialog
                 open={importOpen}
                 onClose={() => setImportOpen(false)}
