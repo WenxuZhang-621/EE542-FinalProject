@@ -1,0 +1,15 @@
+Subject: [M2-DEMO] PO-M2-0003 supplier update
+
+Hello buyer,
+
+Purchase order: PO-M2-0003
+Supplier: Cedar Textiles
+Item: Test component 03
+Ordered quantity: 300
+Original ship date: 2026-12-01
+The unit price changes from USD 2.00 to USD 2.20. Please approve.
+Confirmed quantity: 300
+Confirmed ship date: 2026-12-01
+Unit price: USD 2.20
+
+This is fictional M2 test data.

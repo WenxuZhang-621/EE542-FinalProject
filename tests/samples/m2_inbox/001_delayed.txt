@@ -1,0 +1,15 @@
+Subject: [M2-DEMO] PO-M2-0001 supplier update
+
+Hello buyer,
+
+Purchase order: PO-M2-0001
+Supplier: Alder Components
+Item: Test component 01
+Ordered quantity: 100
+Original ship date: 2026-12-01
+The ship date is delayed by two weeks, from 2026-12-01 to 2026-12-15.
+Confirmed quantity: 100
+Confirmed ship date: 2026-12-15
+Unit price: USD 1.50
+
+This is fictional M2 test data.

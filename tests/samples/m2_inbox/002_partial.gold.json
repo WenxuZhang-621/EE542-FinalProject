@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-M2-0002",
+    "supplier": "example.com",
+    "status": "partial",
+    "change_type": "quantity_change",
+    "source_email_id": "m2-sample-02",
+    "original_date": "2026-12-01",
+    "confirmed_date": "2026-12-01",
+    "quantity_ordered": 200,
+    "quantity_confirmed": 100,
+    "unit_price": 1.75,
+    "currency": "USD",
+    "confidence": 1.0,
+    "notes": "We can only ship 100 of the 200 units; the rest has no confirmed date."
+  }
+]

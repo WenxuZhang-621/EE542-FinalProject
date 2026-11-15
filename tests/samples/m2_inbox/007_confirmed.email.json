@@ -1,0 +1,9 @@
+{
+  "email_id": "m2-sample-07",
+  "from_addr": "supplier07@example.com",
+  "subject": "[M2-DEMO] PO-M2-0007 supplier update",
+  "date": "2026-11-14T12:06:00+00:00",
+  "body_text": "Hello buyer,\n\nPurchase order: PO-M2-0007\nSupplier: Grove Cables\nItem: Test component 07\nOrdered quantity: 300\nOriginal ship date: 2026-12-01\nWe confirm the order as requested.\nConfirmed quantity: 300\nConfirmed ship date: 2026-12-01\nUnit price: USD 3.00\n\nThis is fictional M2 test data.\n",
+  "attachments": [],
+  "thread_id": "m2-thread-07"
+}

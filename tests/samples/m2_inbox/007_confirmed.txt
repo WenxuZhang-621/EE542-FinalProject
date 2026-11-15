@@ -1,0 +1,15 @@
+Subject: [M2-DEMO] PO-M2-0007 supplier update
+
+Hello buyer,
+
+Purchase order: PO-M2-0007
+Supplier: Grove Cables
+Item: Test component 07
+Ordered quantity: 300
+Original ship date: 2026-12-01
+We confirm the order as requested.
+Confirmed quantity: 300
+Confirmed ship date: 2026-12-01
+Unit price: USD 3.00
+
+This is fictional M2 test data.
