@@ -1,0 +1,2 @@
+# Preserve byte offsets in the digital PDF parser fixture on Windows.
+tests/samples/mime/*.pdf binary
