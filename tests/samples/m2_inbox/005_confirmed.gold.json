@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-M2-0005",
+    "supplier": "example.com",
+    "status": "confirmed",
+    "change_type": "none",
+    "source_email_id": "m2-sample-05",
+    "original_date": "2026-12-01",
+    "confirmed_date": "2026-12-01",
+    "quantity_ordered": 100,
+    "quantity_confirmed": 100,
+    "unit_price": 2.5,
+    "currency": "USD",
+    "confidence": 1.0,
+    "notes": "We confirm the order as requested."
+  }
+]

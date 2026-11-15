@@ -22,6 +22,21 @@ import json
 # --------------------------------------------------------------------------- #
 
 @dataclass
+class PurchaseOrder:
+    """Original order terms; CSV requested_ship_date maps to requested_date."""
+
+    po_number: str
+    supplier: str
+    supplier_email: str
+    item: str
+    quantity: float
+    unit_price: float
+    currency: str
+    sent_date: str
+    requested_date: str
+
+
+@dataclass
 class Attachment:
     filename: str
     text: str                      # extracted text (pdfplumber / openpyxl); "" if unreadable

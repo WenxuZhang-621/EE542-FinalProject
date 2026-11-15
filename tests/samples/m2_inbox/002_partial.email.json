@@ -1,0 +1,9 @@
+{
+  "email_id": "m2-sample-02",
+  "from_addr": "supplier02@example.com",
+  "subject": "[M2-DEMO] PO-M2-0002 supplier update",
+  "date": "2026-11-14T12:01:00+00:00",
+  "body_text": "Hello buyer,\n\nPurchase order: PO-M2-0002\nSupplier: Birch Fasteners\nItem: Test component 02\nOrdered quantity: 200\nOriginal ship date: 2026-12-01\nWe can only ship 100 of the 200 units; the rest has no confirmed date.\nConfirmed quantity: 100\nConfirmed ship date: 2026-12-01\nUnit price: USD 1.75\n\nThis is fictional M2 test data.\n",
+  "attachments": [],
+  "thread_id": "m2-thread-02"
+}

@@ -50,7 +50,7 @@ Start the demo page at http://localhost:8501:
 streamlit run dashboard/app.py
 ```
 
-In the sidebar, **Process sample inbox** sends the 6 sample emails in `tests/samples/` through
+In the sidebar, **Process sample inbox** sends the 20 sample emails in `tests/samples/` through
 the LLM into SQLite, and **Run accuracy test** scores the extraction against the gold answers.
 Without `LLM_API_KEY` the page still opens, but both buttons are disabled.
 
@@ -61,7 +61,10 @@ python run_pipeline.py --offline tests/samples --reset   # sample emails -> LLM 
 python extract/eval.py --label M1                        # per-field accuracy -> data/eval_runs.jsonl
 ```
 
-Gmail fetching (`ingest/fetch_emails.py`) is not implemented yet; until it is, use `--offline`.
+Gmail read-only fetching and CSV/XLSX order import are implemented. See
+[`ingest/README.md`](ingest/README.md) for OAuth setup, the shared 40-order fixture,
+and the M2 integration commands. Import order baselines before running the pipeline;
+do not use `--reset` afterward because it removes those baselines.
 
 ### 2. Web UI (`frontend/`)
 

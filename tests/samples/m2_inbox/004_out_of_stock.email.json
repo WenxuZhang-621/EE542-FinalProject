@@ -1,0 +1,9 @@
+{
+  "email_id": "m2-sample-04",
+  "from_addr": "supplier04@example.com",
+  "subject": "[M2-DEMO] PO-M2-0004 supplier update",
+  "date": "2026-11-14T12:03:00+00:00",
+  "body_text": "Hello buyer,\n\nPurchase order: PO-M2-0004\nSupplier: Dune Packaging\nItem: Test component 04\nOrdered quantity: 400\nOriginal ship date: 2026-12-01\nThe item is out of stock. We cannot ship any units and have no new ship date.\nConfirmed quantity: 0\nConfirmed ship date: not confirmed\nUnit price: USD 2.25\n\nThis is fictional M2 test data.\n",
+  "attachments": [],
+  "thread_id": "m2-thread-04"
+}

@@ -1,0 +1,42 @@
+{
+  "as_of": "2026-11-14",
+  "orders": 40,
+  "suppliers": 10,
+  "emails": 10,
+  "exceptions": [
+    {
+      "po_number": "PO-M2-0001",
+      "kind": "delayed"
+    },
+    {
+      "po_number": "PO-M2-0002",
+      "kind": "partial"
+    },
+    {
+      "po_number": "PO-M2-0003",
+      "kind": "price_change"
+    },
+    {
+      "po_number": "PO-M2-0004",
+      "kind": "out_of_stock"
+    },
+    {
+      "po_number": "PO-M2-0011",
+      "kind": "no_reply"
+    },
+    {
+      "po_number": "PO-M2-0012",
+      "kind": "no_reply"
+    },
+    {
+      "po_number": "PO-M2-0013",
+      "kind": "no_reply"
+    }
+  ],
+  "silent_orders": [
+    "PO-M2-0011",
+    "PO-M2-0012",
+    "PO-M2-0013"
+  ],
+  "note": "Deterministic fixture expectations, not measured model accuracy."
+}

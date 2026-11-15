@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-M2-0003",
+    "supplier": "example.com",
+    "status": "price_change",
+    "change_type": "price_change",
+    "source_email_id": "m2-sample-03",
+    "original_date": "2026-12-01",
+    "confirmed_date": "2026-12-01",
+    "quantity_ordered": 300,
+    "quantity_confirmed": 300,
+    "unit_price": 2.2,
+    "currency": "USD",
+    "confidence": 1.0,
+    "notes": "The unit price changes from USD 2.00 to USD 2.20. Please approve."
+  }
+]

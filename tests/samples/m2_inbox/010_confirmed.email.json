@@ -1,0 +1,9 @@
+{
+  "email_id": "m2-sample-10",
+  "from_addr": "supplier10@example.com",
+  "subject": "[M2-DEMO] PO-M2-0010 supplier update",
+  "date": "2026-11-14T12:09:00+00:00",
+  "body_text": "Hello buyer,\n\nPurchase order: PO-M2-0010\nSupplier: Juniper Parts\nItem: Test component 10\nOrdered quantity: 200\nOriginal ship date: 2026-12-01\nWe confirm the order as requested.\nConfirmed quantity: 200\nConfirmed ship date: 2026-12-01\nUnit price: USD 3.75\n\nThis is fictional M2 test data.\n",
+  "attachments": [],
+  "thread_id": "m2-thread-10"
+}

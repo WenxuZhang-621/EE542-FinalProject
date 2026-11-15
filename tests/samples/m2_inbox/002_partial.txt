@@ -1,0 +1,15 @@
+Subject: [M2-DEMO] PO-M2-0002 supplier update
+
+Hello buyer,
+
+Purchase order: PO-M2-0002
+Supplier: Birch Fasteners
+Item: Test component 02
+Ordered quantity: 200
+Original ship date: 2026-12-01
+We can only ship 100 of the 200 units; the rest has no confirmed date.
+Confirmed quantity: 100
+Confirmed ship date: 2026-12-01
+Unit price: USD 1.75
+
+This is fictional M2 test data.
