@@ -96,6 +96,16 @@ def email_view(e: dict) -> dict:
     }
 
 
+def local_day(iso: str | None) -> str:
+    """rules.py stamps detected_at in UTC; show the local calendar day on the timeline."""
+    if not iso:
+        return ""
+    try:
+        return datetime.fromisoformat(iso).astimezone().date().isoformat()
+    except ValueError:
+        return iso[:10]
+
+
 def _num(v):
     return None if v is None else (int(v) if float(v).is_integer() else float(v))
 
@@ -168,7 +178,7 @@ def order_views(c) -> tuple[list[dict], list[dict]]:
         for ex in exs:
             timeline.append(
                 {
-                    "date": (ex["detected_at"] or "")[:10],
+                    "date": local_day(ex["detected_at"]),
                     "kind": "flag",
                     "text": f"Flagged: {ex['kind'].replace('_', ' ')} — {ex['detail']}",
                     "emailId": ex["source_email_id"],
