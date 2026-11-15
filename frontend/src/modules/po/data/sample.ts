@@ -19,6 +19,7 @@ export type Email = {
     date: string;
     subject: string;
     body: string;
+    attachments?: { filename: string; text: string }[];
 };
 
 export type PoEvent = {
@@ -386,8 +387,14 @@ export const STATUS_META: Record<PoStatus, { label: string; color: 'error' | 'wa
 
 export const NEEDS_ATTENTION: PoStatus[] = ['delayed', 'out_of_stock', 'no_reply', 'partial', 'price_change'];
 
-export function supplierOf(id: string) {
-    return SUPPLIERS.find((s) => s.id === id)!;
+/** Swap the bundled suppliers and emails for the backend's (GET /api/orders). */
+export function replaceCatalog(suppliers: Supplier[], emails: Email[]) {
+    SUPPLIERS.splice(0, SUPPLIERS.length, ...suppliers);
+    EMAILS.splice(0, EMAILS.length, ...emails);
+}
+
+export function supplierOf(id: string): Supplier {
+    return SUPPLIERS.find((s) => s.id === id) ?? { id, name: id, email: `@${id}`, country: '' };
 }
 
 export function emailOf(id?: string) {
@@ -411,7 +418,9 @@ export function daysBetween(a: string, b: string) {
 export function summary(o: PurchaseOrder): string {
     switch (o.status) {
         case 'delayed':
-            return `Ship date ${fmtDate(o.requestedDate)} → ${fmtDate(o.currentDate)} (+${daysBetween(o.requestedDate, o.currentDate!)} days)`;
+            if (!o.currentDate) return `Ship date ${fmtDate(o.requestedDate)} → not confirmed yet`;
+            if (!o.requestedDate) return `Delayed, new ship date ${fmtDate(o.currentDate)}`;
+            return `Ship date ${fmtDate(o.requestedDate)} → ${fmtDate(o.currentDate)} (+${daysBetween(o.requestedDate, o.currentDate)} days)`;
         case 'no_reply':
             return `Sent ${fmtDate(o.sentDate)}, no reply for ${daysBetween(o.sentDate, TODAY)} days`;
         case 'partial':
@@ -419,7 +428,8 @@ export function summary(o: PurchaseOrder): string {
         case 'out_of_stock':
             return 'Supplier cannot supply';
         case 'price_change':
-            return `Unit price ${o.unitPrice.toFixed(2)} → ${o.newUnitPrice?.toFixed(2)} ${o.currency}`;
+            if (o.newUnitPrice === undefined) return `New unit price ${o.unitPrice.toFixed(2)} ${o.currency}`;
+            return `Unit price ${o.unitPrice.toFixed(2)} → ${o.newUnitPrice.toFixed(2)} ${o.currency} (${o.unitPrice ? `${(((o.newUnitPrice - o.unitPrice) / o.unitPrice) * 100).toFixed(1)}%` : 'new'})`;
         case 'awaiting':
             return `Sent ${fmtDate(o.sentDate)}, waiting for confirmation`;
         default:

@@ -30,6 +30,9 @@ type Props = { open: boolean; onClose: () => void; onImported: (pos: string[]) =
 export function ImportPoDialog({ open, onClose, onImported }: Props) {
     const { orders, importOrders } = usePoDemo();
     const [fileName, setFileName] = React.useState<string>();
+    const [fileText, setFileText] = React.useState<string>('');
+    const [busy, setBusy] = React.useState(false);
+    const [failed, setFailed] = React.useState<string>();
     const [rows, setRows] = React.useState<ImportRow[]>([]);
     const [missing, setMissing] = React.useState<string[]>([]);
     const [dragging, setDragging] = React.useState(false);
@@ -37,6 +40,8 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
 
     const reset = () => {
         setFileName(undefined);
+        setFileText('');
+        setFailed(undefined);
         setRows([]);
         setMissing([]);
     };
@@ -48,6 +53,7 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
     const load = (name: string, text: string) => {
         const res = analyse(text, orders);
         setFileName(name);
+        setFileText(text);
         setRows(res.rows);
         setMissing(res.missing);
     };
@@ -72,10 +78,18 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
     const tracked = rows.filter((r) => r.kind === 'tracked');
     const errors = rows.filter((r) => r.kind === 'error');
 
-    const doImport = () => {
-        const pos = importOrders(rows);
-        close();
-        onImported(pos);
+    const doImport = async () => {
+        setBusy(true);
+        setFailed(undefined);
+        try {
+            const pos = await importOrders(rows, fileName ? { name: fileName, text: fileText } : undefined);
+            close();
+            onImported(pos);
+        } catch (e) {
+            setFailed((e as Error).message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     return (
@@ -222,6 +236,7 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
                         <Typography variant="caption" color="text.secondary">
                             Rule: an order with no supplier reply 2 or more business days after it was sent is flagged as No reply.
                         </Typography>
+                        {failed && <Alert severity="error">Import failed: {failed}</Alert>}
                     </Stack>
                 )}
             </DialogContent>
@@ -230,8 +245,8 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
                 <Box sx={{ flex: 1 }} />
                 <Button onClick={close}>Cancel</Button>
                 {fileName && !missing.length && (
-                    <Button variant="contained" onClick={doImport} disabled={fresh.length === 0}>
-                        Import {fresh.length} new {fresh.length === 1 ? 'order' : 'orders'}
+                    <Button variant="contained" onClick={doImport} disabled={fresh.length === 0 || busy}>
+                        {busy ? 'Importing…' : `Import ${fresh.length} new ${fresh.length === 1 ? 'order' : 'orders'}`}
                     </Button>
                 )}
             </DialogActions>
