@@ -21,15 +21,19 @@ import json
 import os
 import re
 import sys
+from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional
+from threading import Lock
+from typing import Literal, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
 for p in (ROOT, ROOT / "extract", ROOT / "dashboard", ROOT / "ingest"):
     sys.path.insert(0, str(p))
 import db  # noqa: E402
@@ -38,11 +42,14 @@ from api.po_list import import_po_list  # noqa: E402
 from eval import load_runs  # noqa: E402  (extract/eval.py)
 from rules import RULE_KINDS, sync_exceptions  # noqa: E402
 from schema import EmailMessage  # noqa: E402
+from ingest.mailboxes import MailboxStore, token_available  # noqa: E402
+from ingest.mailbox_oauth import sessions as oauth_sessions  # noqa: E402
 
 SAMPLES = ROOT / "tests" / "samples"
 # Exceptions decide the status shown in the UI; the most urgent kind wins.
 KIND_PRIORITY = ["delayed", "out_of_stock", "partial", "price_change", "no_reply"]
 DB_STATUS_TO_UI = {"pending": "awaiting"}
+SYNC_LOCK = Lock()
 
 app = FastAPI(title="PO Follow-Up API", version="0.2")
 app.add_middleware(
@@ -60,10 +67,13 @@ def conn():
     return db.connect(db.DB_PATH)
 
 
+def mailbox_store():
+    return MailboxStore(db.DB_PATH, rp.EMAILS_OUT)
+
+
 def load_emails() -> dict[str, dict]:
-    if not rp.EMAILS_OUT.exists():
-        return {}
-    return {d["email_id"]: d for d in json.loads(rp.EMAILS_OUT.read_text(encoding="utf-8"))}
+    with closing(conn()) as c:
+        return rp.stored_emails(c)
 
 
 SHORT_UPPER = {"pcb", "led", "lcd", "usb", "cnc", "abs", "pvc"}
@@ -84,7 +94,7 @@ def supplier_view(domain: str, email: str | None) -> dict:
     return {"id": domain, "name": pretty_name(domain), "email": email or f"@{domain}", "country": ""}
 
 
-def email_view(e: dict) -> dict:
+def email_view(e: dict, mailbox: str | None = None) -> dict:
     return {
         "id": e["email_id"],
         "from": e["from_addr"],
@@ -92,6 +102,7 @@ def email_view(e: dict) -> dict:
         "date": e["date"],
         "subject": e["subject"],
         "body": e["body_text"],
+        "mailbox": mailbox,
         "attachments": [{"filename": a["filename"], "text": a["text"]} for a in e.get("attachments", [])],
     }
 
@@ -228,46 +239,126 @@ def order_views(c) -> tuple[list[dict], list[dict]]:
 
 @app.get("/api/health")
 def health():
-    c = conn()
-    n = c.execute("SELECT COUNT(*) FROM purchase_orders").fetchone()[0]
+    with closing(conn()) as c:
+        n = c.execute("SELECT COUNT(*) FROM purchase_orders").fetchone()[0]
     return {
         "ok": True,
         "llm_configured": bool(os.getenv("LLM_API_KEY")),
         "llm_model": os.getenv("LLM_MODEL", "gpt-4o-mini"),
         "llm_base_url": os.getenv("LLM_BASE_URL") or "OpenAI",
-        "gmail_configured": (ROOT / "credentials.json").exists(),
+        "gmail_configured": any(m["authorized"] for m in mailbox_store().list()["mailboxes"]),
         "db_path": str(db.DB_PATH),
         "orders": n,
     }
 
 
+@app.get("/api/gmail/status")
+def gmail_status():
+    state = mailbox_store().list()
+    default = next((m for m in state["mailboxes"] if m["id"] == state["defaultMailboxId"]), None)
+    return {"account": default["address"] if default else "",
+            "authorized": bool(default and default["authorized"]), "query": state["query"]}
+
+
+def require_local_management(request: Request):
+    """The desktop demo has no server login; reject foreign browser origins."""
+    origins = {"http://localhost:3100", "http://127.0.0.1:3100"}
+    origin = request.headers.get("origin")
+    if (request.url.hostname not in {"localhost", "127.0.0.1"}
+            or (origin is not None and origin not in origins)
+            or request.headers.get("sec-fetch-site") == "cross-site"):
+        raise HTTPException(403, "Mailbox management is available from the local PO Assistant only.")
+
+
+@app.get("/api/mailboxes")
+def list_mailboxes():
+    return mailbox_store().list()
+
+
+class ConnectMailboxRequest(BaseModel):
+    mailboxId: str | None = None
+
+
+@app.post("/api/mailboxes/connect")
+def connect_mailbox(request: Request, body: ConnectMailboxRequest):
+    require_local_management(request)
+    try:
+        return oauth_sessions.start(mailbox_store(), body.mailboxId)
+    except (ValueError, OSError) as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/mailboxes/connections/{session_id}")
+def mailbox_connection_status(session_id: str):
+    try:
+        return oauth_sessions.status(session_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+@app.post("/api/mailboxes/connections/{session_id}/cancel")
+def cancel_mailbox_connection(session_id: str, request: Request):
+    require_local_management(request)
+    try:
+        return oauth_sessions.cancel(session_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@app.post("/api/mailboxes/{mailbox_id}/default")
+def default_mailbox(mailbox_id: str, request: Request):
+    require_local_management(request)
+    try:
+        mailbox_store().set_default(mailbox_id)
+        return mailbox_store().list()
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+@app.post("/api/mailboxes/{mailbox_id}/disconnect")
+def disconnect_mailbox(mailbox_id: str, request: Request):
+    require_local_management(request)
+    if not SYNC_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "Wait for the current sync to finish before disconnecting a mailbox.")
+    try:
+        mailbox_store().disconnect(mailbox_id)
+        return mailbox_store().list()
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    finally:
+        SYNC_LOCK.release()
+
+
 @app.get("/api/orders")
 def list_orders():
-    orders, suppliers = order_views(conn())
+    with closing(conn()) as c:
+        orders, suppliers = order_views(c)
+    sources = mailbox_store().sources()
     return {
         "orders": orders,
         "suppliers": suppliers,
-        "emails": [email_view(e) for e in load_emails().values()],
+        "emails": [email_view(e, sources.get(e["email_id"])) for e in load_emails().values()],
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
 
 @app.get("/api/orders/{po}")
 def get_order(po: str):
-    c = conn()
-    orders, suppliers = order_views(c)
+    with closing(conn()) as c:
+        orders, suppliers = order_views(c)
+        ext = c.execute(
+            "SELECT data FROM extractions WHERE po_number = ? ORDER BY email_date DESC, id DESC LIMIT 1", (po,)
+        ).fetchone()
     order = next((o for o in orders if o["po"] == po), None)
     if order is None:
         raise HTTPException(404, f"{po} is not tracked")
     emails = load_emails()
+    sources = mailbox_store().sources()
     related = [
-        email_view(e)
+        email_view(e, sources.get(e["email_id"]))
         for e in emails.values()
         if po.lower() in (e["subject"] + e["body_text"]).lower() or e["email_id"] == order["lastEmailId"]
     ]
-    ext = c.execute(
-        "SELECT data FROM extractions WHERE po_number = ? ORDER BY email_date DESC, id DESC LIMIT 1", (po,)
-    ).fetchone()
     return {
         "order": order,
         "supplier": next(s for s in suppliers if s["id"] == order["supplierId"]),
@@ -279,20 +370,22 @@ def get_order(po: str):
 @app.post("/api/po-list")
 async def post_po_list(file: UploadFile = File(...)):
     data = await file.read()
-    c = conn()
-    result = import_po_list(c, file.filename or "po_list.csv", data)
-    if result.missing_columns:
-        c.rollback()
-        raise HTTPException(400, f"missing columns: {', '.join(result.missing_columns)}")
-    # The no-reply rule needs the imported sent dates; recompute right away.
-    found = sync_exceptions(c, emails=[EmailMessage.from_dict(e) for e in load_emails().values()])
-    c.commit()
+    with closing(conn()) as c:
+        result = import_po_list(c, file.filename or "po_list.csv", data)
+        if result.missing_columns:
+            c.rollback()
+            raise HTTPException(400, f"missing columns: {', '.join(result.missing_columns)}")
+        # The no-reply rule needs the imported sent dates; recompute right away.
+        found = sync_exceptions(c, emails=[EmailMessage.from_dict(e) for e in load_emails().values()])
+        c.commit()
     return {**result.to_dict(), "exceptions": len(found)}
 
 
 class SyncRequest(BaseModel):
-    source: str = "auto"  # auto | gmail | samples | gold
+    source: Literal["auto", "gmail", "samples", "gold"] = "auto"
     since: str = "7d"
+    query: str | None = Field(default=None, max_length=500)
+    mailboxId: str | None = Field(default=None, max_length=64)
 
 
 def gold_extract_timed(msg: EmailMessage):
@@ -307,64 +400,123 @@ def gold_extract_timed(msg: EmailMessage):
     return [], 0.0
 
 
-def fetch_gmail(since: str) -> list[EmailMessage]:
-    from fetch_emails import fetch  # ingest/fetch_emails.py (A)
+def fetch_gmail(since: str, query: str | None = None, mailbox_id: str | None = None) -> list[EmailMessage]:
+    from ingest.fetch_emails import fetch, gmail_service
 
-    return fetch(since)
+    store = mailbox_store()
+    mailbox = store.get(mailbox_id)
+    if not token_available(mailbox["token_path"]):
+        raise ValueError("Reconnect this Gmail account in Settings > Mailboxes before syncing.")
+    messages = fetch(
+        since, service=gmail_service(interactive=False, token_file=Path(mailbox["token_path"])),
+        query=os.getenv("GMAIL_QUERY", "") if query is None else query,
+        expected_account=mailbox["address"],
+    )
+    return store.namespace(mailbox["id"], messages)
 
 
 @app.post("/api/sync")
 def sync(req: SyncRequest | None = None):
+    if not SYNC_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "Another inbox sync is running. Wait for it to finish.")
+    try:
+        req = req or SyncRequest()
+        mid = None
+        if req.source in ("auto", "gmail"):
+            mid = req.mailboxId or mailbox_store().list()["defaultMailboxId"]
+            req = req.model_copy(update={"mailboxId": mid})
+        with closing(conn()) as c:
+            try:
+                result = _sync(req, c)
+            except HTTPException as e:
+                if mid:
+                    mailbox_store().record_sync(mid, str(e.detail))
+                raise
+            if mid:
+                mailbox_store().record_sync(mid)
+                result["mailboxId"] = mid
+                result["mailbox"] = mailbox_store().get(mid)["address"]
+            return result
+    finally:
+        SYNC_LOCK.release()
+
+
+def _sync(req: SyncRequest, c):
+    from google.auth.exceptions import RefreshError
+    from ingest.fetch_emails import since_query
+    from openai import APIError
+    from extract import ExtractionError
+
     req = req or SyncRequest()
-    c = conn()
     known = {r[0] for r in c.execute("SELECT DISTINCT source_email_id FROM extractions")} | set(load_emails())
     source, note = req.source, ""
     msgs: list[EmailMessage] = []
     if source in ("auto", "gmail"):
         try:
-            msgs, source = fetch_gmail(req.since), "gmail"
-        except (NotImplementedError, FileNotFoundError, ImportError) as e:
-            if req.source == "gmail":
-                raise HTTPException(503, f"Gmail is not available: {e}")
-            note = f"Gmail not configured ({e.__class__.__name__}); read the sample inbox instead"
-            source = "samples"
+            since_query(req.since)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        try:
+            if req.mailboxId:
+                msgs = fetch_gmail(req.since, req.query, req.mailboxId)
+            else:
+                msgs = fetch_gmail(req.since, req.query)
+            source = "gmail"
+        except RefreshError as e:
+            raise HTTPException(
+                401, "Gmail authorization has expired or was revoked. Reconnect the account in "
+                "Settings > Mailboxes. For the legacy CLI setup, run python ingest/fetch_emails.py --auth-only."
+            ) from e
+        except (RuntimeError, ValueError, FileNotFoundError, ImportError) as e:
+            raise HTTPException(503, str(e)) from e
+        except Exception as e:
+            raise HTTPException(
+                502, "Gmail could not be read. Check the backend internet connection and retry."
+            ) from e
     if source in ("samples", "gold"):
         msgs = rp.load_offline(SAMPLES)
     new = [m for m in msgs if m.email_id not in known]
 
-    before = {o["po"]: (o["status"], o.get("currentDate")) for o in order_views(c)[0]}
-    if new and source == "gold":
-        real = rp.extract_timed
-        rp.extract_timed = gold_extract_timed  # process-wide for this call only
-        try:
-            summary = rp.run(new, reset=False)
-        finally:
-            rp.extract_timed = real
-        note = "reference answers used instead of the LLM (demo mode)"
-        c = conn()
-    elif new:
-        if not os.getenv("LLM_API_KEY"):
+    def snapshot():
+        return {o["po"]: (o["status"], o.get("currentDate"), o.get("qtyConfirmed"),
+                          o.get("newUnitPrice"), o.get("lastEmailId"))
+                for o in order_views(c)[0]}
+
+    before = snapshot()
+    if new:
+        if source != "gold" and not os.getenv("LLM_API_KEY"):
             raise HTTPException(
-                503,
-                "LLM_API_KEY is not set; new emails cannot be extracted. "
-                "Copy .env.example to .env and fill it in, then restart the API.",
+                503, "Gmail was read, but the extraction model is not configured. "
+                "Set LLM_API_KEY and the model endpoint on the backend, then retry.",
             )
-        summary = rp.run(new, reset=False)
-        c = conn()
+        try:
+            summary = rp.run(
+                new, reset=False, skip_processed=True,
+                extractor=gold_extract_timed if source == "gold" else None,
+            )
+        except (APIError, ExtractionError) as e:
+            raise HTTPException(
+                503, "Order extraction could not finish. Check the model service and retry. "
+                "Completed emails are saved; remaining emails will be retried."
+            ) from e
+        if source == "gold":
+            note = "reference answers used instead of the LLM (demo mode)"
     else:
         found = sync_exceptions(c, emails=[EmailMessage.from_dict(e) for e in load_emails().values()])
         c.commit()
         summary = {"emails": 0, "pos": 0, "exceptions": len(found), "avg_seconds": 0.0}
-    after = {o["po"]: (o["status"], o.get("currentDate")) for o in order_views(c)[0]}
+    after = snapshot()
     changed = [po for po, st in after.items() if before.get(po) != st]
     return {
         "source": source,
         "note": note,
-        "newEmails": len(new),
+        "newEmails": summary["emails"],
+        "matchedEmails": len(msgs),
         "poUpdates": summary["pos"],
         "exceptions": summary["exceptions"],
         "avgSeconds": round(summary["avg_seconds"], 2),
         "changed": changed,
+        "syncedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
 
@@ -388,7 +540,13 @@ def eval_runs():
 
 @app.post("/api/reset")
 def reset():
-    db.reset(conn())
-    for f in (rp.EMAILS_OUT, rp.EXTRACTIONS_OUT):
-        f.unlink(missing_ok=True)
-    return {"ok": True}
+    if not SYNC_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "Wait for the inbox sync to finish before resetting.")
+    try:
+        with closing(conn()) as c:
+            db.reset(c)
+        for f in (rp.EMAILS_OUT, rp.EXTRACTIONS_OUT):
+            f.unlink(missing_ok=True)
+        return {"ok": True}
+    finally:
+        SYNC_LOCK.release()

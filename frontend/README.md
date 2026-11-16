@@ -2,10 +2,10 @@
 
 Web UI for the PO follow-up assistant: TypeScript, Next.js 16, React 19, MUI 6.
 
-**Status: front-end demo.** Every page runs on sample data in `src/modules/po/data/sample.ts`
-(fictional companies on `example.com` domains). Nothing calls the Python pipeline yet, and
-the chat answers are scripted. Refreshing the page (or **Reset sample data** in the user
-menu) resets the demo; you stay signed in.
+**Status: orders connected to the Python backend.** With the backend running, orders,
+CSV imports and Gmail sync use SQLite and the real extraction pipeline. Without it,
+the UI displays labelled sample data. Follow-up drafts, playbook and chat remain scripted
+demos. Sign-in stores a demo profile in the browser; it does not authorize a Gmail account.
 
 ## Run
 
@@ -24,8 +24,9 @@ pnpm dev          # http://localhost:3100
 | Route | What it shows |
 |---|---|
 | `/login`, `/signup` | Sign-in and sign-up. Front-end only for now: any email and password work, nothing is sent or stored except the profile in the browser. Every other page redirects here when signed out. |
-| `/orders` | Counts, the "needs attention" list, and every PO. **Import PO list** loads a CSV; **Sync inbox** simulates a new supplier email that turns PO-2026-0441 red. |
+| `/orders` | Counts, exceptions and every PO. **Import PO list** loads a CSV; **Sync inbox** opens the real Gmail connection, time-range and search-filter dialog. |
 | `/orders/[po]` | One PO: key facts, timeline, the latest email, and the fields the LLM extracted from it. |
+| `/settings/mailboxes` | Connect/reconnect Gmail, choose a default, sync one or all accounts, inspect last sync/errors, and disconnect. |
 | `/follow-ups` | Follow-up emails drafted by the expediter clone, with the playbook rules and emails they cite. Approve, edit or reject; nothing is sent. |
 | `/playbook` | What the clone copies from a senior expediter: rules (from interviews), memory (supplier emails, RAG) and writing style. |
 | `/evaluation` | Accuracy, recall, draft rating and speed per milestone (placeholder numbers for now). |
@@ -53,8 +54,22 @@ the bundled sample data and show a banner saying so.
 |---|---|
 | Orders, order detail, **Import PO list** (`POST /api/po-list`), **Sync inbox** (`POST /api/sync`), Evaluation (`GET /api/eval-runs`) | Follow-up drafts, Playbook, chat (M3) |
 
-Without an LLM key the backend cannot extract, so **Sync inbox** asks for the labelled demo mode
-(reference answers for the sample inbox) and the toast says "reference answers".
+**Sync inbox → Read Gmail** always uses the configured Gmail account and model. It never
+switches to sample answers when either service fails. Authorization, connection and extraction
+errors appear in the dialog. Successful syncs show matching emails, newly processed messages,
+changed orders and a completion time. Repeated syncs skip messages already processed.
+
+Open the profile menu **Settings > Mailboxes**, or **Manage mailboxes** in the sync dialog.
+Select **Connect Gmail**, continue to Google in a new tab, and grant read-only access.
+The page polls for completion and restores a pending connection after refresh. You can
+cancel a pending request, reconnect an account, change the default, or sync all accounts
+sequentially. Sync results and original emails identify the mailbox. Disconnect preserves
+existing orders and email history, and prevents further sync until the account is reconnected.
+
+Set `GMAIL_QUERY=subject:M2-DEMO` in `.env` to default to the M2 test messages, or edit the
+filter in the dialog. Connected accounts belong to one shared local workspace; changing
+the demo login profile does not isolate accounts. Browser OAuth requires the backend on the
+same computer. Requests run synchronously with a five-minute proxy timeout per mailbox.
 
 ## Layout
 
@@ -62,7 +77,7 @@ Without an LLM key the backend cannot extract, so **Sync inbox** asks for the la
 src/app/(po)/           pages (orders, follow-ups, playbook, evaluation) and the shared layout
 src/modules/po/data/    sample data and display helpers
 src/modules/po/import.ts  CSV parsing, row checks, the no-reply rule
-src/modules/po/store.tsx  in-memory demo state; the place to plug in API calls
+src/modules/po/store.tsx  live API state with a labelled offline sample fallback
 src/modules/po/components/  nav bar, chat panel, import dialog, small shared pieces
 public/samples/         sample and template PO lists
 ```

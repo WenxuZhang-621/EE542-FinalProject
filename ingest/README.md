@@ -35,7 +35,7 @@ Each teammate should authorize their own account.
 
 The local callback writes `token.json`. Account mismatch stops before reading messages.
 Testing-mode refresh tokens can expire; if Google rejects an expired/revoked token,
-reauthorize using a new local `GMAIL_TOKEN_PATH`, keeping old tokens out of Git.
+run `--auth-only` again to reauthorize, keeping tokens out of Git.
 Do not widen the scope to send or modify messages for M2.
 
 Official references:
@@ -111,6 +111,20 @@ this module has no send endpoint and no send scope.
 
 ## Fetch and integrate
 
+For browser account management, open **Settings > Mailboxes** in the local frontend.
+Each account gets its own Google read-only authorization. Choose a default mailbox or
+select an account when syncing; the previous `.env` account is adopted once automatically.
+New token files live under the database directory's ignored `mailbox_tokens/` folder.
+Disconnect disables an account without removing its history or revoking Google's grant.
+The current app is one shared team workspace, not a multi-tenant service.
+
+The browser authorization flow uses the existing **Desktop app** client and a temporary
+`127.0.0.1` callback with state validation and PKCE. It requires browser and backend on the
+same computer. A remotely deployed website needs a Web OAuth client, HTTPS callback,
+authenticated sessions and tenant isolation before enabling account management.
+See [Google's desktop OAuth guide](https://developers.google.com/identity/protocols/oauth2/native-app)
+and [loopback flow guidance](https://developers.google.com/identity/protocols/oauth2/resources/loopback-migration).
+
 ```powershell
 .\.venv\Scripts\python.exe ingest/fetch_emails.py --since 7d --query "subject:M2-DEMO" --out data/gmail_m2.json
 .\.venv\Scripts\python.exe run_pipeline.py --in data/gmail_m2.json
@@ -130,8 +144,12 @@ C's API and frontend integration landed on main at `78860d0` while this contribu
 was being prepared. `/api/sync` already calls this module's `fetch(since)` function.
 The current `/api/po-list` route still uses C's separate `api/po_list.py` importer;
 switching it to `import_po_list` requires adapting the response contract shown above.
-The live run below was verified through the Python pipeline and Streamlit viewer;
-the Next.js Sync inbox button has not yet been exercised with this contribution.
+That initial contribution was verified through the Python pipeline and Streamlit viewer.
+The subsequent web integration adds **Orders → Sync inbox → Read Gmail**. The dialog shows
+the configured account, accepts a time range and Gmail search filter, and refreshes the
+orders after extraction. Use `GMAIL_QUERY=subject:M2-DEMO` for a default test-only filter.
+The API uses noninteractive OAuth refresh and returns instructions if reauthorization is
+needed. It does not open a browser or silently fall back to sample mail during HTTP sync.
 
 ## Verification without a Gmail account or model key
 

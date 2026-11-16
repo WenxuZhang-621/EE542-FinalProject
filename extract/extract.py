@@ -76,6 +76,10 @@ RESPONSE_SCHEMA = {
 _client = None
 
 
+class ExtractionError(RuntimeError):
+    """A message did not produce a valid result and must remain retryable."""
+
+
 def model_name() -> str:
     return os.getenv("LLM_MODEL", "gpt-4o-mini")
 
@@ -88,7 +92,10 @@ def _get_client():
         key = os.getenv("LLM_API_KEY")
         if not key:
             raise RuntimeError("LLM_API_KEY is not set. Copy .env.example to .env and fill it in.")
-        _client = OpenAI(api_key=key, base_url=os.getenv("LLM_BASE_URL") or None)
+        _client = OpenAI(
+            api_key=key, base_url=os.getenv("LLM_BASE_URL") or None,
+            timeout=60.0, max_retries=1,
+        )
     return _client
 
 
@@ -124,15 +131,16 @@ def _call_llm(msg: EmailMessage) -> dict:
 
 
 def extract_one(msg: EmailMessage) -> list[POExtraction]:
-    """Extract every PO mentioned in one email. Retries once on a bad answer, then skips."""
+    """Retry malformed answers once, then leave the message available for a retry."""
     for attempt in (1, 2):
         try:
             orders = _call_llm(msg)["orders"]
+            if not isinstance(orders, list):
+                raise ValueError("orders must be a JSON array")
             return [POExtraction.from_dict({**o, "source_email_id": msg.email_id}) for o in orders]
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
             log.warning("email %s: unusable answer (attempt %d): %s", msg.email_id, attempt, e)
-    log.error("email %s: skipped after 2 attempts", msg.email_id)
-    return []
+    raise ExtractionError("The model returned invalid order data twice. Please retry sync.")
 
 
 def extract_timed(msg: EmailMessage) -> tuple[list[POExtraction], float]:

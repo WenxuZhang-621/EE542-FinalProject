@@ -29,16 +29,17 @@ def load_settings():
     load_dotenv(ROOT / ".env", override=False)
 
 
-def gmail_service():
+def gmail_service(*, interactive: bool = True, token_file: Path | None = None):
     """Authorize a desktop client; keep its refresh token only on this computer."""
     from google.auth.transport.requests import Request
+    from google.auth.exceptions import RefreshError
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
 
     load_settings()
     client_path = ROOT / os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
-    token_path = ROOT / os.getenv("GMAIL_TOKEN_PATH", "token.json")
+    token_path = token_file or ROOT / os.getenv("GMAIL_TOKEN_PATH", "token.json")
     creds = None
     if token_path.exists():
         creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
@@ -48,8 +49,18 @@ def gmail_service():
             )
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except RefreshError:
+                if not interactive:
+                    raise
+                creds = None
+        if not creds or not creds.valid:
+            if not interactive:
+                raise RuntimeError(
+                    "Gmail authorization is required. On the computer running the backend, "
+                    "run python ingest/fetch_emails.py --auth-only, then retry sync."
+                )
             if not client_path.is_file():
                 raise RuntimeError(
                     "Missing desktop OAuth credentials.json. See ingest/README.md."
@@ -68,6 +79,25 @@ def gmail_service():
         if os.name != "nt":
             token_path.chmod(0o600)
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+
+def connection_status() -> dict:
+    """Report local setup without contacting Google or returning token contents."""
+    load_settings()
+    token_path = ROOT / os.getenv("GMAIL_TOKEN_PATH", "token.json")
+    account = os.getenv("GMAIL_TEST_ACCOUNT", "")
+    try:
+        from google.oauth2.credentials import Credentials
+
+        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        authorized = creds.has_scopes(SCOPES) and bool(creds.valid or creds.refresh_token)
+    except (OSError, ValueError, KeyError):
+        authorized = False
+    return {
+        "account": account,
+        "authorized": bool(account and authorized),
+        "query": os.getenv("GMAIL_QUERY", ""),
+    }
 
 
 def since_query(since: str, *, now: datetime | None = None) -> str:

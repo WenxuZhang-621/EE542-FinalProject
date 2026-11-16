@@ -76,7 +76,34 @@ pnpm install
 pnpm dev                         # http://localhost:3100
 ```
 
-It runs on sample data and does not need the Python side or an API key yet.
+Without the backend, the UI shows clearly labelled sample data. For real Gmail sync,
+authorize the test mailbox as described in `ingest/README.md`, configure the extraction
+model in `.env`, and start the backend in a second terminal from the repository root:
+
+```bash
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+Open **Orders → Sync inbox**, choose a time range and optional Gmail search filter,
+then select **Read Gmail**. For the M2 test messages use `subject:M2-DEMO`. The dialog
+reads the configured Gmail account with read-only access, processes up to 50 matching
+messages, and refreshes the orders. Import order baselines first so exception rules
+can compare the supplier's response against the original terms. Duplicate syncs do
+not duplicate events; completed messages survive a later extraction failure.
+
+Use **Settings > Mailboxes** in the profile menu, or **Manage mailboxes** in the sync
+dialog, to connect more Gmail accounts, choose a default account, and disconnect accounts.
+Each account authorizes read-only access on Google. The existing local account is adopted
+automatically, preserving imported orders and email history. Select one mailbox or all
+connected mailboxes when syncing; source emails show the receiving mailbox.
+
+This is a local, single-team workspace: connected mailboxes share its order database.
+The sign-in page is a demo profile, not server authentication or tenant isolation.
+OAuth uses a desktop loopback callback, so authorize from the same computer running the
+backend. Follow-up drafts and chat remain demos. Sync is manual, not scheduled.
+
+For teammate setup, validation details, and online-deployment prerequisites, see
+[the Gmail web sync handoff](docs/GMAIL_WEB_HANDOFF.md).
 
 ### Created locally, never committed
 

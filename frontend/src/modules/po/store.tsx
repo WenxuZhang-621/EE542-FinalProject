@@ -10,13 +10,13 @@ import {
     type PurchaseOrder,
 } from './data/sample';
 import { toOrder, type ImportRow } from './import';
-import { api, type SyncResponse } from './api';
+import { api, type SyncOptions, type SyncResponse } from './api';
 
 export type DraftState = FollowUpDraft & {
     state: 'review' | 'saved' | 'rejected';
 };
 
-export type SyncResult = Pick<SyncResponse, 'source' | 'newEmails' | 'changed' | 'note'>;
+export type SyncResult = Pick<SyncResponse, 'source' | 'newEmails' | 'changed' | 'note' | 'matchedEmails' | 'syncedAt'>;
 
 type PoDemo = {
     orders: PurchaseOrder[];
@@ -26,7 +26,7 @@ type PoDemo = {
     /** why the backend is not in use (shown in a banner) */
     offlineReason?: string;
     justUpdated?: string;
-    sync: (source?: 'auto' | 'gmail' | 'samples' | 'gold') => Promise<SyncResult>;
+    sync: (source?: 'auto' | 'gmail' | 'samples' | 'gold', options?: SyncOptions) => Promise<SyncResult>;
     approve: (id: string, body: string) => void;
     reject: (id: string) => void;
     /** Imports a PO list: POST /api/po-list when live, otherwise the in-browser rows. */
@@ -66,15 +66,18 @@ export function PoDemoProvider({ children }: { children: React.ReactNode }) {
     }, [reload]);
 
     const sync = React.useCallback(
-        async (source: 'auto' | 'gmail' | 'samples' | 'gold' = 'auto'): Promise<SyncResult> => {
-            if (live) {
+        async (source: 'auto' | 'gmail' | 'samples' | 'gold' = 'auto', options: SyncOptions = {}): Promise<SyncResult> => {
+            if (live || source === 'gmail') {
                 // Without an LLM key the backend cannot extract; ask for the labelled demo mode
                 // (reference answers) instead of failing, and say so in the result.
                 if (source === 'auto' && !(await api.health()).llm_configured) source = 'gold';
-                const r = await api.sync(source);
-                await reload();
-                setJustUpdated(r.changed[0]);
-                return r;
+                try {
+                    const r = await api.sync(source, options);
+                    setJustUpdated(r.changed[0]);
+                    return r;
+                } finally {
+                    await reload();
+                }
             }
             // Sample mode: replay the scripted "new email" once.
             await new Promise((res) => setTimeout(res, 1200));
