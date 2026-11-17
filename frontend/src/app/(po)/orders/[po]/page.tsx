@@ -8,6 +8,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { EmailView, SectionCard, StatusChip } from '@/modules/po/components/bits';
 import { STATUS_META, emailOf, fmtDate, supplierOf, type PoEvent } from '@/modules/po/data/sample';
 import { usePoDemo } from '@/modules/po/store';
+import { api, type OrderDetailResponse } from '@/modules/po/api';
 
 const DOT: Record<PoEvent['kind'], string> = {
     sent: 'grey.400',
@@ -33,8 +34,23 @@ function Fact({ label, value, alert }: { label: string; value: React.ReactNode; 
 export default function OrderDetailPage() {
     const { po } = useParams<{ po: string }>();
     const router = useRouter();
-    const { orders, drafts } = usePoDemo();
+    const { orders, drafts, live } = usePoDemo();
     const o = orders.find((x) => x.po === decodeURIComponent(po));
+    const orderNumber = o?.po;
+    const detailKey = orderNumber + ':' + o?.lastEmailId;
+    const [detail, setDetail] = React.useState<{
+        key: string; extraction?: OrderDetailResponse['extraction']; error?: string;
+    }>();
+    React.useEffect(() => {
+        if (!live || !orderNumber) return;
+        let active = true;
+        api.orderDetail(orderNumber).then((result) => {
+            if (active) setDetail({ key: detailKey, extraction: result.extraction });
+        }).catch((error: Error) => {
+            if (active) setDetail({ key: detailKey, error: error.message });
+        });
+        return () => { active = false; };
+    }, [live, orderNumber, detailKey]);
     if (!o) {
         return (
             <Container maxWidth="lg">
@@ -46,7 +62,17 @@ export default function OrderDetailPage() {
     const email = emailOf(o.lastEmailId);
     const draft = drafts.find((d) => d.po === o.po);
     const late = o.currentDate && o.currentDate > o.requestedDate;
-    const fromSupplier = email && email.from === s.email;
+    const fromSupplier = email && (live || email.from === s.email);
+    const currentDetail = detail?.key === detailKey ? detail : undefined;
+    const extractionFields = ['po_number', 'status', 'original_date', 'confirmed_date',
+        'quantity_ordered', 'quantity_confirmed', 'unit_price', 'currency', 'notes'];
+    const sampleExtraction: Record<string, string | number | null> = {
+        po_number: o.po, status: o.status, original_date: o.requestedDate,
+        confirmed_date: o.currentDate ?? null, quantity_ordered: o.qty,
+        quantity_confirmed: o.qtyConfirmed ?? null,
+        unit_price: o.newUnitPrice ?? o.unitPrice, currency: o.currency, notes: o.reason ?? '',
+    };
+    const extraction = live ? currentDetail?.extraction : sampleExtraction;
 
     return (
         <Container maxWidth="lg">
@@ -143,27 +169,25 @@ export default function OrderDetailPage() {
                     )}
                     {fromSupplier && (
                         <SectionCard title="What the AI read from this email">
+                            {live && !currentDetail ? <Typography variant="body2">Loading extracted fields…</Typography>
+                                : currentDetail?.error ? <Typography variant="body2" color="error.main">
+                                    Could not load the saved extraction: {currentDetail.error}
+                                </Typography>
+                                : !extraction ? <Typography variant="body2">No saved extraction for this order.</Typography>
+                                : (
                             <Box sx={{ display: 'grid', gridTemplateColumns: '160px 1fr', rowGap: 1, columnGap: 2 }}>
-                                {[
-                                    ['po_number', o.po],
-                                    ['status', o.status],
-                                    ['original_date', o.requestedDate],
-                                    ['confirmed_date', o.currentDate ?? 'null'],
-                                    ['quantity_ordered', String(o.qty)],
-                                    ['quantity_confirmed', o.qtyConfirmed === undefined ? 'null' : String(o.qtyConfirmed)],
-                                    ['unit_price', o.newUnitPrice ? String(o.newUnitPrice) : 'null'],
-                                    ['notes', o.reason ?? ''],
-                                ].map(([k, v]) => (
+                                {extractionFields.map((k) => (
                                     <React.Fragment key={k}>
                                         <Typography variant="body2" color="text.secondary" fontFamily="monospace">
                                             {k}
                                         </Typography>
                                         <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
-                                            {v || '""'}
+                                            {extraction[k] === '' ? '""' : String(extraction[k] ?? 'null')}
                                         </Typography>
                                     </React.Fragment>
                                 ))}
                             </Box>
+                                )}
                         </SectionCard>
                     )}
                 </Stack>

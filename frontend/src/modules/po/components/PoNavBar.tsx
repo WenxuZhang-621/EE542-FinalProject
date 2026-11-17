@@ -23,6 +23,7 @@ import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import { usePoAuth } from '../auth';
 import { usePoDemo } from '../store';
 
@@ -107,6 +108,10 @@ function UserMenu() {
                     </Typography>
                 </Box>
                 <Divider />
+                <MenuItem onClick={() => { setAnchor(null); router.push('/settings/mailboxes'); }}>
+                    <ListItemIcon><MailOutlineIcon fontSize="small" /></ListItemIcon>
+                    Settings · Mailboxes
+                </MenuItem>
                 <MenuItem
                     onClick={() => {
                         setAnchor(null);

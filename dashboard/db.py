@@ -6,6 +6,31 @@ from pathlib import Path
 DB_PATH = os.environ.get("DB_PATH", "data/po.sqlite")
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS mailbox_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mailboxes (
+    id TEXT PRIMARY KEY,
+    address TEXT NOT NULL UNIQUE,
+    token_path TEXT,
+    connected INTEGER NOT NULL DEFAULT 1,
+    last_sync_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS mailbox_messages (
+    email_id TEXT PRIMARY KEY,
+    mailbox_id TEXT NOT NULL REFERENCES mailboxes(id),
+    gmail_message_id TEXT NOT NULL,
+    UNIQUE(mailbox_id, gmail_message_id)
+);
+CREATE TABLE IF NOT EXISTS email_messages (
+    email_id         TEXT PRIMARY KEY,
+    data             TEXT NOT NULL,
+    processed_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS purchase_orders (
     po_number          TEXT PRIMARY KEY,
     supplier           TEXT NOT NULL,
@@ -64,7 +89,8 @@ _PO_LIST_COLUMNS = ("supplier_email", "item", "sent_date", "requested_date")
 def reset(conn: sqlite3.Connection) -> None:
     """Empty every table (used by the demo's reset button)."""
     conn.executescript("DELETE FROM exceptions; DELETE FROM extractions; "
-                       "DELETE FROM events; DELETE FROM purchase_orders;")
+                       "DELETE FROM events; DELETE FROM purchase_orders; DELETE FROM email_messages; "
+                       "DELETE FROM mailbox_messages;")
     conn.commit()
 
 

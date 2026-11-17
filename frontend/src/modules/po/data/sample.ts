@@ -20,6 +20,7 @@ export type Email = {
     subject: string;
     body: string;
     attachments?: { filename: string; text: string }[];
+    mailbox?: string | null;
 };
 
 export type PoEvent = {
@@ -407,7 +408,9 @@ export function ruleOf(id: string) {
 
 export function fmtDate(iso?: string) {
     if (!iso) return '—';
-    const d = new Date(`${iso}T00:00:00`);
+    // PO dates are date-only; Gmail messages include a timestamp and timezone.
+    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+    if (Number.isNaN(d.getTime())) return '—';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 

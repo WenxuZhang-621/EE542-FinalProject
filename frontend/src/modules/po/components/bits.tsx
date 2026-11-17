@@ -46,6 +46,7 @@ export function SourceChips({ sources }: { sources: Source[] }) {
                     );
                 }
                 const e = emailOf(s.emailId)!;
+                if (!e) return null;
                 return (
                     <Tooltip key={`e${s.emailId}`} title={e.subject} arrow>
                         <Chip
@@ -70,9 +71,22 @@ export function EmailView({ email }: { email: Email }) {
             <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>
                 {email.from} · {fmtDate(email.date)}
             </Typography>
+            {email.mailbox && <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>
+                Received in {email.mailbox}
+            </Typography>}
             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                 {email.body}
             </Typography>
+            {email.attachments?.map((attachment, index) => (
+                <Box component="details" key={index} sx={{ mt: 2 }}>
+                    <Typography component="summary" variant="body2" sx={{ cursor: 'pointer' }}>
+                        {attachment.filename || 'Attachment'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                        {attachment.text || 'Text could not be extracted from this attachment.'}
+                    </Typography>
+                </Box>
+            ))}
         </Paper>
     );
 }

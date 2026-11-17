@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
     Box,
+    Alert,
     Button,
     Chip,
     Container,
@@ -21,6 +22,7 @@ import {
 import SyncIcon from '@mui/icons-material/Sync';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import { ImportPoDialog } from '@/modules/po/components/ImportPoDialog';
+import { SyncInboxDialog } from '@/modules/po/components/SyncInboxDialog';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
@@ -29,15 +31,16 @@ import { StatCard } from '@/modules/po/components/StatCard';
 import { SampleBanner, SectionCard, StatusChip } from '@/modules/po/components/bits';
 import { NEEDS_ATTENTION, fmtDate, summary, supplierOf } from '@/modules/po/data/sample';
 import { usePoAuth } from '@/modules/po/auth';
-import { usePoDemo } from '@/modules/po/store';
+import { type SyncResult, usePoDemo } from '@/modules/po/store';
 
 const SEVERITY = ['delayed', 'out_of_stock', 'no_reply', 'price_change', 'partial'];
 
 export default function OrdersPage() {
     const router = useRouter();
-    const { orders, drafts, sync, justUpdated, live, offlineReason } = usePoDemo();
+    const { orders, drafts, justUpdated, live, offlineReason } = usePoDemo();
     const { user } = usePoAuth();
-    const [syncing, setSyncing] = React.useState(false);
+    const [syncOpen, setSyncOpen] = React.useState(false);
+    const [lastSync, setLastSync] = React.useState<SyncResult>();
     const [toast, setToast] = React.useState<string>();
     const [importOpen, setImportOpen] = React.useState(false);
     const [imported, setImported] = React.useState<string[]>([]);
@@ -49,24 +52,6 @@ export default function OrdersPage() {
     const count = (...s: string[]) => orders.filter((o) => s.includes(o.status)).length;
     const toReview = drafts.filter((d) => d.state === 'review');
 
-    const onSync = async () => {
-        setSyncing(true);
-        try {
-            const r = await sync();
-            const where = r.source === 'gmail' ? 'Gmail' : r.source === 'gold' ? 'sample inbox (reference answers)' : 'sample inbox';
-            setToast(
-                r.newEmails
-                    ? `${r.newEmails} new supplier ${r.newEmails === 1 ? 'email' : 'emails'} from ${where}` +
-                          (r.changed.length ? ` · ${r.changed.length} ${r.changed.length === 1 ? 'order' : 'orders'} changed: ${r.changed.slice(0, 3).join(', ')}` : '')
-                    : `No new supplier emails in ${where}`,
-            );
-        } catch (e) {
-            setToast(`Sync failed: ${(e as Error).message}`);
-        } finally {
-            setSyncing(false);
-        }
-    };
-
     return (
         <Container maxWidth="lg">
             <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-end' }} spacing={2} sx={{ mb: 3 }}>
@@ -74,7 +59,7 @@ export default function OrdersPage() {
                     <Typography variant="overline" color="text.secondary" fontWeight={700}>
                         Orders
                     </Typography>
-                    <Typography variant="h4">Today · Nov 14</Typography>
+                    <Typography variant="h4">Purchase orders</Typography>
                     <Typography color="text.secondary" sx={{ mt: 0.5 }}>
                         {user?.company} · {orders.length} open purchase orders with {new Set(orders.map((o) => o.supplierId)).size} suppliers
                     </Typography>
@@ -83,12 +68,19 @@ export default function OrdersPage() {
                     <Button variant="outlined" startIcon={<UploadFileOutlinedIcon />} onClick={() => setImportOpen(true)}>
                         Import PO list
                     </Button>
-                    <Button variant="contained" startIcon={<SyncIcon />} onClick={onSync} disabled={syncing}>
-                        {syncing ? 'Reading new emails…' : 'Sync inbox'}
+                    <Button variant="contained" startIcon={<SyncIcon />} onClick={() => setSyncOpen(true)}>
+                        Sync inbox
                     </Button>
                 </Stack>
             </Stack>
             {!live && <SampleBanner text={offlineReason ?? 'Showing bundled sample data.'} />}
+            {lastSync && <Alert severity={lastSync.note ? 'warning' : 'success'} sx={{ mb: 2 }} onClose={() => setLastSync(undefined)}>
+                {lastSync.note ? 'Gmail sync completed with issues' : 'Gmail sync complete'} · {lastSync.matchedEmails ?? 0} matching emails · {lastSync.newEmails} newly processed
+                {' '}· {lastSync.changed.length} orders updated
+                {lastSync.syncedAt && ` · ${new Date(lastSync.syncedAt).toLocaleTimeString()}`}
+                {lastSync.note && <Typography variant="body2">{lastSync.note}</Typography>}
+            </Alert>}
+            <SyncInboxDialog open={syncOpen} onClose={() => setSyncOpen(false)} onSynced={setLastSync} />
             <ImportPoDialog
                 open={importOpen}
                 onClose={() => setImportOpen(false)}
