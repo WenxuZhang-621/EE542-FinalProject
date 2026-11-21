@@ -67,6 +67,9 @@ ref, say that you could not confirm it. Do not add new facts."""
 # [E1], [R3, E2], and the full-width 【E1】 / ［E1］ that models use in Chinese answers.
 _CITATION = re.compile(r"[\[【［]\s*((?:[ER][\w-]+)(?:\s*[,;，、；]\s*[ER][\w-]+)*)\s*[\]】］]")
 _REF_SEPARATOR = re.compile(r"\s*[,;，、；]\s*")
+# Markdown the chat panel would show as raw symbols, although the prompt asks for plain text.
+_MD_BOLD = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*|__(\S(?:.*?\S)?)__")
+_MD_HEADING = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+", re.MULTILINE)
 
 Completion = Callable[[list[dict], list[dict] | None], dict]
 # (messages, tools or None) -> {"content": str | None, "tool_calls": [{"id", "name", "arguments"}]}
@@ -122,6 +125,12 @@ def resolve_citations(
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = "\n".join(line.rstrip() for line in cleaned.splitlines()).strip()
     return cleaned, sources
+
+
+def plain_text(text: str) -> str:
+    """Drop **bold**, __bold__ and # heading marks, which the chat panel shows as symbols."""
+    text = _MD_BOLD.sub(lambda m: m[1] or m[2], text or "")
+    return _MD_HEADING.sub("", text)
 
 
 def _cite_again(
@@ -213,7 +222,7 @@ def chat(
     # carries its own sources; after running out of rounds the last prompt already asked.
     if box.refs and not sources and not box.drafts and not out_of_rounds:
         text, sources = _cite_again(complete, convo, answer, box.refs, labels, language) or (text, sources)
-    return {"answer": text, "tools_used": tools_used, "sources": sources, "drafts": box.drafts}
+    return {"answer": plain_text(text), "tools_used": tools_used, "sources": sources, "drafts": box.drafts}
 
 
 def ref_labels(box: Toolbox, *, zh: bool = False) -> dict[str, str]:

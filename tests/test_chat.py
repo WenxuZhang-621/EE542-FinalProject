@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 
-from agent.chat import MAX_ROUNDS, _history, chat, resolve_citations
+from agent.chat import MAX_ROUNDS, _history, chat, plain_text, resolve_citations
 from agent.tools import Toolbox, label
 from dashboard import db
 from rag.embed import HashingEmbedder
@@ -275,6 +275,15 @@ def test_resolve_citations():
     labels = {"E1": "email of Nov 12", "R3": "§3", "RU1": "rule U1"}
     text, _ = resolve_citations("Follow [R3] and [RU1] after [E1, R3, E9].", refs, labels)
     assert text == "Follow (§3) and (rule U1) after (email of Nov 12; §3)."
+
+
+def test_markdown_marks_are_removed_from_answers(conn):
+    assert plain_text("For **PO-1001**, see __this__.\n## Next steps\n- Ask") == \
+        "For PO-1001, see this.\nNext steps\n- Ask"
+    assert plain_text("2 * 3 ** 2 and a_b__c stay") == "2 * 3 ** 2 and a_b__c stay"
+    model = Script([call("get_po", po_number="PO-1001")], "**PO-1001** now ships on Dec 15 [E1].")
+    assert ask(conn, model, "When does PO-1001 ship?")["answer"] == \
+        "PO-1001 now ships on Dec 15 (email of Nov 12)."
 
 
 def test_history_is_trimmed_and_must_end_with_a_question():
