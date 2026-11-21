@@ -85,5 +85,24 @@ M3 fixture reference answers are used to isolate A's storage/rule behavior.
   deployment or existing team database was modified. Raw emails, account addresses,
   OAuth files and Gmail IDs are retained locally and are not committed.
 - Sender filtering and RAG attribution with a shared demo sender have offline tests.
-  The live run used an additional `subject:M3-DEMO` filter; it is not a claim of a
-  separate live experiment with unrelated senders or of live LLM extraction accuracy.
+  The initial live run above also used `subject:M3-DEMO`.
+
+### Live supplier filter with an empty search field
+
+On November 21, the Gmail read path used by Sync inbox (`api.main.fetch_gmail` at
+`f77bb8d`) ran with an explicitly empty optional query and contacts from a copy of
+the imported PO database. The three fictional suppliers shared one listed sender
+address. Gmail received only the time window, sent/draft exclusions and sender filter.
+
+| Seven-day window ending 2026-11-21 21:08 UTC | Control count | Returned by the app |
+|---|---:|---:|
+| Incoming messages from the imported address | 16 | 16 |
+| Incoming messages from other senders | 38 | 0 |
+| Total | 54 | 16 |
+
+The control enumerated all incoming message IDs in the same window and classified
+them independently using only their From headers. The inventory was stable across the
+run. The app returned exactly the eligible IDs, including all 15 original demo
+messages and one other message from the same address. It requested zero full
+messages from other senders. The app's 50-message limit applied to supplier matches.
+This acceptance covers Gmail retrieval before extraction and deduplication.
