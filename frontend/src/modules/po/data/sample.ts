@@ -2,6 +2,7 @@
 // Everything here is made up: fictional companies on example.com domains.
 
 export type PoStatus =
+    | 'unmatched'
     | 'awaiting'
     | 'no_reply'
     | 'confirmed'
@@ -387,6 +388,7 @@ export const DRAFTS: FollowUpDraft[] = [
 ];
 
 export const STATUS_META: Record<PoStatus, { label: string; color: 'error' | 'warning' | 'success' | 'default' | 'info' }> = {
+    unmatched: { label: 'Not in your PO list', color: 'default' },
     delayed: { label: 'Delayed', color: 'error' },
     out_of_stock: { label: 'Out of stock', color: 'error' },
     no_reply: { label: 'No reply', color: 'warning' },
@@ -436,6 +438,8 @@ export function daysBetween(a: string, b: string) {
 
 export function summary(o: PurchaseOrder): string {
     switch (o.status) {
+        case 'unmatched':
+            return 'Import this PO to check it against the ordered terms';
         case 'delayed':
             if (!o.currentDate) return `Ship date ${fmtDate(o.requestedDate)} → not confirmed yet`;
             if (!o.requestedDate) return `Delayed, new ship date ${fmtDate(o.currentDate)}`;

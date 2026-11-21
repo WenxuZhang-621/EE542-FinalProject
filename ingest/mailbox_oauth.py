@@ -152,11 +152,11 @@ class OAuthSessions:
             with session.lock:
                 session.mailbox_id = mid
                 session.status = "connected"
-            return "Gmail connected successfully. Read-only access is ready.", 200
+            return "Gmail connected. Reading and saving approved drafts are ready; nothing is sent automatically.", 200
         except Exception:
             with session.lock:
                 session.status = "error"
-                session.error = ("Gmail could not be connected. Confirm the selected account and read-only "
+                session.error = ("Gmail could not be connected. Confirm the selected account and read/compose "
                                  "permission, check the connection, and try again.")
             return session.error, 400
         finally:

@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-M3-CEDAR-HISTORY",
+    "supplier": "Cedar Textiles",
+    "status": "confirmed",
+    "change_type": "quantity_change",
+    "source_email_id": "m3-cedar-02",
+    "original_date": null,
+    "confirmed_date": "2026-10-31",
+    "quantity_ordered": null,
+    "quantity_confirmed": 200,
+    "unit_price": null,
+    "currency": "USD",
+    "confidence": 1.0,
+    "notes": ""
+  }
+]

@@ -63,7 +63,7 @@ python run_pipeline.py --offline tests/samples --reset   # sample emails -> LLM 
 python extract/eval.py --label M1                        # per-field accuracy -> data/eval_runs.jsonl
 ```
 
-Gmail read-only fetching and CSV/XLSX order import are implemented. See
+Supplier-filtered Gmail fetching and CSV/XLSX order import are implemented. See
 [`ingest/README.md`](ingest/README.md) for OAuth setup, the shared 40-order fixture,
 and the M2 integration commands. Import order baselines before running the pipeline;
 do not use `--reset` afterward because it removes those baselines.
@@ -88,21 +88,25 @@ python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 
 Open **Orders → Sync inbox**, choose a time range and optional Gmail search filter,
 then select **Read Gmail**. For the M2 test messages use `subject:M2-DEMO`. The dialog
-reads the configured Gmail account with read-only access, processes up to 50 matching
+reads supplier messages from the configured Gmail account, processes up to 50 matching
 messages, and refreshes the orders. Import order baselines first so exception rules
 can compare the supplier's response against the original terms. Duplicate syncs do
 not duplicate events; completed messages survive a later extraction failure.
 
 Use **Settings > Mailboxes** in the profile menu, or **Manage mailboxes** in the sync
 dialog, to connect more Gmail accounts, choose a default account, and disconnect accounts.
-Each account authorizes read-only access on Google. The existing local account is adopted
+Each account authorizes Gmail read and compose access on Google. Reconnect old read-only
+accounts to save drafts. Google compose also permits sending, but the application only
+creates drafts after buyer approval. The existing local account is adopted
 automatically, preserving imported orders and email history. Select one mailbox or all
 connected mailboxes when syncing; source emails show the receiving mailbox.
 
 This is a local, single-team workspace: connected mailboxes share its order database.
 The sign-in page is a demo profile, not server authentication or tenant isolation.
 OAuth uses a desktop loopback callback, so authorize from the same computer running the
-backend. Follow-up drafts and chat remain demos. Sync is manual, not scheduled.
+backend. Chat and playbook use the backend. The Gmail draft-saving service is implemented,
+but the Follow-ups approval UI still needs C's persistence/API integration; see
+[the M3 A handoff](docs/m3-a-handoff.md). Sync is manual, not scheduled.
 
 For teammate setup, validation details, and online-deployment prerequisites, see
 [the Gmail web sync handoff](docs/GMAIL_WEB_HANDOFF.md).

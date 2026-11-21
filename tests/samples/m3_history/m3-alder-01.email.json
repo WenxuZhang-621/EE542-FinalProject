@@ -1,0 +1,9 @@
+{
+  "email_id": "m3-alder-01",
+  "from_addr": "sales@alder.example.com",
+  "subject": "[M3-DEMO] PO-M3-ALDER-HISTORY supplier update",
+  "date": "2026-10-17T09:00:00+00:00",
+  "body_text": "FICTIONAL CLASSROOM TEST - no real purchase or shipment.\nHistorical update dated 2026-10-17.\n\nHello buyer,\n\nThe shipment for PO-M3-ALDER-HISTORY is delayed from 2026-10-31 to 2026-11-05 due to a machine failure. We will arrange a backup production line.\n\nBest,\nAlder Components",
+  "attachments": [],
+  "thread_id": "m3-thread-PO-M3-ALDER-HISTORY"
+}

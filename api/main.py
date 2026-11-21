@@ -26,6 +26,7 @@ import json
 import os
 import re
 import sys
+from io import BytesIO
 from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -43,7 +44,7 @@ for p in (ROOT, ROOT / "extract", ROOT / "dashboard", ROOT / "ingest"):
     sys.path.insert(0, str(p))
 import db  # noqa: E402
 import run_pipeline as rp  # noqa: E402
-from api.po_list import import_po_list  # noqa: E402
+from ingest.po_import import import_po_list  # noqa: E402
 from eval import load_runs  # noqa: E402  (extract/eval.py)
 from rules import RULE_KINDS, sync_exceptions  # noqa: E402
 from schema import EmailMessage  # noqa: E402
@@ -164,20 +165,22 @@ def order_views(c) -> tuple[list[dict], list[dict]]:
     for r in rows:
         po = r["po_number"]
         exs = sorted(exceptions.get(po, []), key=lambda e: KIND_PRIORITY.index(e["kind"]))
-        status = exs[0]["kind"] if exs else DB_STATUS_TO_UI.get(r["status"], r["status"])
+        if not r["in_po_list"]:
+            exs, status = [], "unmatched"
+        elif exs:
+            status = exs[0]["kind"]
+        else:
+            status = "awaiting" if r["status"] == "pending" else "confirmed"
         evs = events.get(po, [])
         notes = next((e["notes"] for e in reversed(evs) if e["notes"]), None)
         ext = latest_ext.get(po)
-        # Price change: the event row keeps "was -> now"; purchase_orders holds only one price.
+        # Compare the latest supplier quote with the preserved imported unit price.
         unit_price, new_price = r["unit_price"], None
-        if status == "price_change":
-            pe = next(
-                (e for e in reversed(evs) if e["change_type"] == "price_change" and e["new_value"]), None
-            )
-            if pe and pe["old_value"] not in (None, "", "None"):
-                unit_price, new_price = float(pe["old_value"]), float(pe["new_value"])
-            elif pe:
-                unit_price = float(pe["new_value"])
+        if any(e["kind"] == "price_change" for e in exs):
+            price = c.execute("SELECT data FROM extractions WHERE po_number=? "
+                              "ORDER BY email_date DESC, id DESC", (po,))
+            new_price = next((d["unit_price"] for row in price
+                              if (d := json.loads(row[0])).get("unit_price") is not None), None)
         timeline = []
         if r["sent_date"]:
             timeline.append({"date": r["sent_date"], "kind": "sent", "text": "PO sent to supplier"})
@@ -215,6 +218,7 @@ def order_views(c) -> tuple[list[dict], list[dict]]:
             "sentDate": r["sent_date"] or "",
             "requestedDate": r["requested_date"] or r["original_date"] or "",
             "status": status,
+            "inPoList": bool(r["in_po_list"]),
             "events": timeline,
             "lastEmailId": r["last_email_id"],
             "exceptions": [
@@ -378,14 +382,14 @@ def get_order(po: str):
 async def post_po_list(file: UploadFile = File(...)):
     data = await file.read()
     with closing(conn()) as c:
-        result = import_po_list(c, file.filename or "po_list.csv", data)
-        if result.missing_columns:
+        result = import_po_list(BytesIO(data), conn=c, filename=file.filename or "po_list.csv")
+        if result.file_errors:
             c.rollback()
-            raise HTTPException(400, f"missing columns: {', '.join(result.missing_columns)}")
+            raise HTTPException(400, "; ".join(result.file_errors))
         # The no-reply rule needs the imported sent dates; recompute right away.
         found = sync_exceptions(c, emails=[EmailMessage.from_dict(e) for e in load_emails().values()])
         c.commit()
-    return {**result.to_dict(), "exceptions": len(found)}
+    return {**result.to_api_dict(), "exceptions": len(found)}
 
 
 class SyncRequest(BaseModel):
@@ -408,8 +412,12 @@ def gold_extract_timed(msg: EmailMessage):
 
 
 def fetch_gmail(since: str, query: str | None = None, mailbox_id: str | None = None) -> list[EmailMessage]:
-    from ingest.fetch_emails import fetch, gmail_service
+    from ingest.fetch_emails import fetch, gmail_service, supplier_addresses
 
+    with closing(conn()) as c:
+        suppliers = supplier_addresses(c)
+    if not suppliers:
+        raise HTTPException(409, "Import your PO list first")
     store = mailbox_store()
     mailbox = store.get(mailbox_id)
     if not token_available(mailbox["token_path"]):
@@ -418,6 +426,7 @@ def fetch_gmail(since: str, query: str | None = None, mailbox_id: str | None = N
         since, service=gmail_service(interactive=False, token_file=Path(mailbox["token_path"])),
         query=os.getenv("GMAIL_QUERY", "") if query is None else query,
         expected_account=mailbox["address"],
+        supplier_emails=suppliers,
     )
     return store.namespace(mailbox["id"], messages)
 
@@ -469,6 +478,8 @@ def _sync(req: SyncRequest, c):
             else:
                 msgs = fetch_gmail(req.since, req.query)
             source = "gmail"
+        except HTTPException:
+            raise
         except RefreshError as e:
             raise HTTPException(
                 401, "Gmail authorization has expired or was revoked. Reconnect the account in "

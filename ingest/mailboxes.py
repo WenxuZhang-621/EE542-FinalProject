@@ -15,7 +15,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from dashboard.db import connect
-from ingest.fetch_emails import ROOT, SCOPES
+from ingest.fetch_emails import ROOT, has_required_scopes
 
 
 def utc_now():
@@ -32,8 +32,8 @@ def token_available(path: str | None) -> bool:
     from google.oauth2.credentials import Credentials
 
     try:
-        creds = Credentials.from_authorized_user_file(path, SCOPES)
-        return creds.has_scopes(SCOPES) and bool(creds.valid or creds.refresh_token)
+        creds = Credentials.from_authorized_user_file(path)
+        return has_required_scopes(creds) and bool(creds.valid or creds.refresh_token)
     except (OSError, ValueError, KeyError, TypeError):
         return False
 
@@ -106,8 +106,8 @@ class MailboxStore:
 
     def add(self, address, credentials):
         """The address must come from Google's authenticated profile, never from the UI."""
-        if not credentials.has_scopes(SCOPES) or not credentials.refresh_token:
-            raise ValueError("Read-only Gmail access and offline authorization are required. Please reconnect.")
+        if not has_required_scopes(credentials) or not credentials.refresh_token:
+            raise ValueError("Gmail read/compose access and offline authorization are required. Please reconnect.")
         address = address.strip().lower()
         mid = account_id(address)
         self.token_dir.mkdir(parents=True, exist_ok=True)

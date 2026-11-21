@@ -140,7 +140,7 @@ export default function MailboxesPage() {
                 </Button>
             </Stack>
             <Alert severity="info" sx={{ mb: 2 }}>
-                Connected mailboxes share this workspace&apos;s orders. Gmail access is read-only; no emails are sent.
+                Connected mailboxes share this workspace&apos;s orders. Gmail access allows reading and saving approved drafts. The app never sends email.
                 Sync runs when you select Read Gmail. There is no scheduled sync yet.
             </Alert>
             {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(undefined)}>{error}</Alert>}
@@ -187,7 +187,7 @@ export default function MailboxesPage() {
             <Dialog open={!!session} fullWidth maxWidth="sm">
                 <DialogTitle>Connect Gmail</DialogTitle>
                 <DialogContent>
-                    <Typography sx={{ mb: 2 }}>Choose your Google account and allow read-only Gmail access. Return here after authorizing.</Typography>
+                    <Typography sx={{ mb: 2 }}>Choose your Google account and allow Gmail read and compose access. Google includes sending in the compose permission; this app only saves approved drafts. Return here after authorizing.</Typography>
                     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                     <Alert severity="info">{connectionStatus === 'processing' ? 'Finishing authorization…' : 'Waiting for Google authorization. This request expires after 10 minutes.'}</Alert>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>

@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-M3-ALDER-HISTORY",
+    "supplier": "Alder Components",
+    "status": "confirmed",
+    "change_type": "date_change",
+    "source_email_id": "m3-alder-02",
+    "original_date": null,
+    "confirmed_date": "2026-10-31",
+    "quantity_ordered": null,
+    "quantity_confirmed": 100,
+    "unit_price": null,
+    "currency": "USD",
+    "confidence": 1.0,
+    "notes": ""
+  }
+]

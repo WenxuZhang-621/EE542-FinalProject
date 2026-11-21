@@ -155,7 +155,8 @@ def test_fetch_pages_filters_and_order():
         message(part("text/plain", "Second"), "m2"),
         message(part("text/plain", "First"), "m1"),
     ]
-    messages = fetch("7d", service=service, expected_account="test@example.com")
+    messages = fetch("7d", service=service, expected_account="test@example.com",
+                     supplier_emails=["supplier@example.com"])
     assert [m.email_id for m in messages] == ["m1", "m2"]
     args = service.users().messages().list.call_args.kwargs
     assert args["pageToken"] == "p2" and "-in:sent -in:drafts" in args["q"]
@@ -167,7 +168,8 @@ def test_account_mismatch_reads_no_mail():
         "emailAddress": "wrong@example.com"
     }
     with pytest.raises(RuntimeError, match="does not match"):
-        fetch("7d", service=service, expected_account="test@example.com")
+        fetch("7d", service=service, expected_account="test@example.com",
+              supplier_emails=["supplier@example.com"])
     service.users().messages.assert_not_called()
 
 
@@ -182,4 +184,5 @@ def test_sent_messages_are_not_supplier_replies():
     sent = message(part("text/plain", "My outgoing PO"))
     sent["labelIds"] = ["SENT"]
     service.users().messages().get().execute.return_value = sent
-    assert fetch("7d", service=service, expected_account="test@example.com") == []
+    assert fetch("7d", service=service, expected_account="test@example.com",
+                 supplier_emails=["supplier@example.com"]) == []

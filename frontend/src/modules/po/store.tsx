@@ -110,7 +110,7 @@ export function PoDemoProvider({ children }: { children: React.ReactNode }) {
             if (live && file) {
                 const r = await api.importPoList(new Blob([file.text], { type: 'text/csv' }), file.name);
                 await reload();
-                return r.new.map((x) => x.po_number);
+                return [...r.new, ...r.completed].map((x) => x.po_number);
             }
             const fresh = rows.filter((r) => r.kind === 'new').map(toOrder);
             setOrders((prev) => [...fresh, ...prev]);

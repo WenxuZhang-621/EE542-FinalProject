@@ -32,7 +32,7 @@ export type ConnectionStatus = {
     mailboxId: string | null; error: string | null;
 };
 export type ImportedRow = { line: number; po_number: string; kind: string; error: string };
-export type ImportResponse = { new: ImportedRow[]; tracked: ImportedRow[]; errors: ImportedRow[]; exceptions: number };
+export type ImportResponse = { new: ImportedRow[]; tracked: ImportedRow[]; completed: ImportedRow[]; errors: ImportedRow[]; exceptions: number };
 export type EvalRun = {
     label: string;
     time: string;

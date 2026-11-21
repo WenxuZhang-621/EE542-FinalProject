@@ -104,7 +104,7 @@ export function SyncInboxDialog({ open, onClose, onSynced, initialMailboxId }: {
                                 {connected.length > 1 && <MenuItem value="all">All connected mailboxes</MenuItem>}
                             </TextField> : <Alert severity="info">Connect a Gmail account to start syncing.</Alert>}
                             <Typography variant="body2" color="text.secondary">
-                                Read-only access. Reads up to 50 matching emails per mailbox and updates this workspace&apos;s orders.
+                                Reads up to 50 matching supplier emails per mailbox, using contacts from your imported PO list. No emails are sent.
                             </Typography>
                             <Button component={Link} href="/settings/mailboxes" disabled={busy} sx={{ alignSelf: 'flex-start' }}>
                                 Manage mailboxes

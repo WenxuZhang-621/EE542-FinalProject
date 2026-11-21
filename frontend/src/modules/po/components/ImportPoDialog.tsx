@@ -75,6 +75,8 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
     };
 
     const fresh = rows.filter((r) => r.kind === 'new');
+    const completed = rows.filter((r) => r.kind === 'completed');
+    const ready = fresh.length + completed.length;
     const tracked = rows.filter((r) => r.kind === 'tracked');
     const errors = rows.filter((r) => r.kind === 'error');
 
@@ -164,6 +166,7 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
                             </Typography>
                             <Chip size="small" label={`${rows.length} rows`} />
                             <Chip size="small" color="primary" label={`${fresh.length} new`} />
+                            {completed.length > 0 && <Chip size="small" color="info" label={`${completed.length} to complete from your PO list`} />}
                             <Chip size="small" variant="outlined" label={`${tracked.length} already tracked`} />
                             {errors.length > 0 && <Chip size="small" color="error" label={`${errors.length} with errors`} />}
                         </Stack>
@@ -206,6 +209,10 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
                                                     <Typography variant="body2" color="error.main">
                                                         Skipped: {r.error}
                                                     </Typography>
+                                                ) : r.kind === 'completed' ? (
+                                                    <Typography variant="body2" color="info.main">
+                                                        Complete ordered terms; keep supplier updates
+                                                    </Typography>
                                                 ) : r.kind === 'tracked' ? (
                                                     <Typography variant="body2" color="text.secondary">
                                                         Already tracked
@@ -245,8 +252,8 @@ export function ImportPoDialog({ open, onClose, onImported }: Props) {
                 <Box sx={{ flex: 1 }} />
                 <Button onClick={close}>Cancel</Button>
                 {fileName && !missing.length && (
-                    <Button variant="contained" onClick={doImport} disabled={fresh.length === 0 || busy}>
-                        {busy ? 'Importing…' : `Import ${fresh.length} new ${fresh.length === 1 ? 'order' : 'orders'}`}
+                    <Button variant="contained" onClick={doImport} disabled={ready === 0 || busy}>
+                        {busy ? 'Importing…' : `Import ${ready} ${ready === 1 ? 'order' : 'orders'}`}
                     </Button>
                 )}
             </DialogActions>
