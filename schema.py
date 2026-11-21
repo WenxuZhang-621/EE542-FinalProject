@@ -5,6 +5,7 @@ Shared data contracts for the PO follow-up pipeline.
     extract/  consumes  EmailMessage, produces POExtraction
     dashboard/ consumes POExtraction
     rules.py  consumes  POExtraction, produces POException
+    agent/    consumes  POException + emails, produces FollowUpDraft
 
 Locked on Day 1. Changing any field requires agreement from all three module owners.
 """
@@ -125,6 +126,41 @@ class POException:
     detail: str                    # one line, e.g. "2026-12-01 → 2026-12-15 (+14 days)"
     detected_at: str               # ISO 8601, first time the exception was seen
     source_email_id: Optional[str] = None
+
+
+# --------------------------------------------------------------------------- #
+# agent -> API / Gmail drafts (added for M3)
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class FollowUpDraft:
+    """A follow-up email written by the digital clone, waiting for the buyer's approval.
+
+    agent/ fills the content; the API stores it and moves `state`; ingest/gmail_drafts.py
+    saves an approved draft to Gmail (never sends) and fills `gmail_draft_id`.
+    """
+
+    draft_id: str
+    po_number: str
+    to: str                        # supplier email address
+    subject: str
+    body: str
+    why: str                       # one or two sentences: which situation and which rule
+    rule_ids: list[str] = field(default_factory=list)    # playbook rules cited, e.g. ["3", "7"]
+    email_ids: list[str] = field(default_factory=list)   # emails cited
+    language: str = "en"           # "en" | "zh", follows the supplier's latest email
+    reply_to_email_id: Optional[str] = None   # the Gmail draft goes into this email's thread
+    thread_id: Optional[str] = None
+    created_at: str = ""           # ISO 8601
+    state: str = "review"          # review | saved | rejected
+    gmail_draft_id: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "FollowUpDraft":
+        return cls(**d)
 
 
 # JSON schema handed to the LLM for structured output (extract/ uses this).
