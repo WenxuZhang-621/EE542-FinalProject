@@ -25,6 +25,8 @@ All three modules share the data contracts in `schema.py`. **Do not change
 | `extract/`   | P2    | LLM extraction: `EmailMessage` → `POExtraction`                     | `extract.py` + `eval.py`, >80% field accuracy on 20 samples |
 | `dashboard/` | P3    | SQLite storage, upsert + delay events, web dashboard               | `ingest_result.py` + dashboard with red-flagged delays |
 | `frontend/`  | —     | Web UI (Next.js + MUI): orders, PO list import, follow-up drafts, chat | Demo on sample data; see `frontend/README.md` |
+| `rag/`       | P2    | Vector index over stored emails and the playbook; `search_emails`, `search_playbook` | M3; see `rag/README.md` |
+| `agent/`     | P2    | The expediter clone: buyer playbook, follow-up drafts, chat with tools | M3; see `agent/README.md` |
 
 `run_pipeline.py` runs the whole Python pipeline with one command.
 

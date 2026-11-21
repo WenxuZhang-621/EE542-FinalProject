@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -111,6 +112,9 @@ def run_eval(label: str, samples_dir: Path = SAMPLES_DIR) -> dict:
         "label": label,
         "time": datetime.now().isoformat(timespec="seconds"),
         "model": model_name(),
+        # Where the model ran, so pages can tell our GPU (vLLM via the tunnel) from an API
+        # without guessing from the model name. Runs recorded before M3 have no base_url.
+        "base_url": os.getenv("LLM_BASE_URL") or "openai",
         **score(per_sample),
         "m1_overall": _m1_overall(per_sample),
         "avg_seconds": sum(seconds) / max(len(seconds), 1),

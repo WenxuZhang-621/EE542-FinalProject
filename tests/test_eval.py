@@ -38,3 +38,15 @@ def test_rescore_uses_current_gold_and_reports_the_m1_subset(tmp_path):
 def test_prompt_names_json_for_json_object_mode():
     # OpenAI-compatible APIs reject response_format=json_object unless a message says "JSON".
     assert "json" in SYSTEM_PROMPT.lower()
+
+
+def test_run_records_where_the_model_ran(tmp_path, monkeypatch):
+    import eval as ev
+
+    monkeypatch.setattr(ev, "RUNS_PATH", tmp_path / "runs.jsonl")
+    monkeypatch.setattr(ev, "extract_timed", lambda msg: ([], 0.01))
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:8001/v1")
+    assert ev.run_eval("M3-gpu")["base_url"] == "http://localhost:8001/v1"
+    monkeypatch.delenv("LLM_BASE_URL")
+    assert ev.run_eval("M3-api")["base_url"] == "openai"
+    assert [r["base_url"] for r in ev.load_runs()] == ["http://localhost:8001/v1", "openai"]
