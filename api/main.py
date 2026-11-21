@@ -11,6 +11,11 @@ database the Python pipeline writes and returns the shapes the front end already
     GET  /api/orders/{po}     one order with events, exceptions, latest email and extraction
     POST /api/po-list         upload a CSV/xlsx PO list -> new / tracked / errors
     POST /api/sync            fetch new emails (Gmail, or the sample inbox) -> extract -> rules
+    POST /api/chat            ask the expediter clone (tool calls + RAG, agent/chat.py)
+    GET  /api/playbook        built-in playbook rules + the company rules users uploaded
+    POST /api/playbook/preview         split pasted text into rules for review (not saved)
+    POST /api/playbook/rules           save reviewed company rules (U1, U2, ...)
+    PATCH/DELETE /api/playbook/rules/{id}  enable, disable, edit or remove an uploaded rule
     GET  /api/eval-runs       accuracy runs from extract/eval.py
     POST /api/reset           empty the demo database
 """
@@ -352,12 +357,14 @@ def get_order(po: str):
     order = next((o for o in orders if o["po"] == po), None)
     if order is None:
         raise HTTPException(404, f"{po} is not tracked")
+    from rag.index import mentions_po  # whole PO numbers only: PO-1001 is not PO-100
+
     emails = load_emails()
     sources = mailbox_store().sources()
     related = [
         email_view(e, sources.get(e["email_id"]))
         for e in emails.values()
-        if po.lower() in (e["subject"] + e["body_text"]).lower() or e["email_id"] == order["lastEmailId"]
+        if mentions_po(e, po) or e["email_id"] == order["lastEmailId"]
     ]
     return {
         "order": order,
@@ -520,12 +527,158 @@ def _sync(req: SyncRequest, c):
     }
 
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=40)
+    buyerName: str | None = Field(default=None, max_length=100)
+
+
+def draft_view(d) -> dict:
+    """A schema.FollowUpDraft in the front end's FollowUpDraft shape (data/sample.ts)."""
+    return {
+        "id": d.draft_id,
+        "po": d.po_number,
+        "to": d.to,
+        "subject": d.subject,
+        "body": d.body,
+        "why": d.why,
+        "sources": [{"type": "rule", "ruleId": r} for r in d.rule_ids]
+        + [{"type": "email", "emailId": e} for e in d.email_ids],
+    }
+
+
+@app.post("/api/chat")
+def post_chat(req: ChatRequest):
+    """Ask the expediter clone. The page sends the whole conversation; nothing is stored."""
+    from agent.chat import chat
+    from agent.llm import LLMError
+
+    if not os.getenv("LLM_API_KEY"):
+        raise HTTPException(
+            503, "The chat model is not configured. Set LLM_API_KEY and the model endpoint on the backend."
+        )
+    try:
+        with closing(conn()) as c:
+            result = chat(c, [m.model_dump() for m in req.messages], buyer_name=req.buyerName)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    except LLMError as e:
+        raise HTTPException(502, "The chat model could not answer. Check the model service and retry.") from e
+    return {
+        "answer": result["answer"],
+        "toolsUsed": result["tools_used"],
+        "sources": result["sources"],
+        "drafts": [draft_view(d) for d in result["drafts"]],
+    }
+
+
+class PreviewRulesRequest(BaseModel):
+    text: str = Field(max_length=60_000)
+    filename: str | None = Field(default=None, max_length=200)
+
+
+class RuleIn(BaseModel):
+    title: str = Field(default="", max_length=200)
+    text: str = Field(max_length=2000)
+    kinds: list[str] = Field(default_factory=list, max_length=10)
+
+
+class SaveRulesRequest(BaseModel):
+    rules: list[RuleIn] = Field(min_length=1, max_length=50)
+    source: str | None = Field(default=None, max_length=200)
+    buyerName: str | None = Field(default=None, max_length=100)
+
+
+class RulePatch(BaseModel):
+    enabled: bool | None = None
+    title: str | None = Field(default=None, max_length=200)
+    text: str | None = Field(default=None, max_length=2000)
+    kinds: list[str] | None = Field(default=None, max_length=10)
+
+
+def _uploaded_id(rule_id: str) -> str:
+    if not re.fullmatch(r"U\d+", rule_id):
+        raise HTTPException(403, "Built-in playbook rules are read-only; only uploaded rules can change.")
+    return rule_id
+
+
+@app.get("/api/playbook")
+def get_playbook():
+    """Built-in rules (agent/buyer_playbook.md) first, then every uploaded rule with `enabled`."""
+    from agent.playbook import load_playbook
+    from agent.uploads import list_uploaded
+
+    with closing(conn()) as c:
+        uploaded = list_uploaded(c)
+    return {"rules": [{**r.to_dict(), "enabled": True} for r in load_playbook()] + uploaded}
+
+
+@app.post("/api/playbook/preview")
+def preview_playbook_rules(req: PreviewRulesRequest, request: Request):
+    """Split pasted text or a .md/.txt file into rules. Nothing is saved."""
+    from agent.uploads import UploadError, preview_rules
+
+    require_local_management(request)
+    try:
+        return preview_rules(req.text, use_llm=bool(os.getenv("LLM_API_KEY")))
+    except UploadError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+@app.post("/api/playbook/rules")
+def save_playbook_rules(req: SaveRulesRequest, request: Request):
+    """Save the rules the buyer reviewed in the preview."""
+    from agent.uploads import UploadError, save_rules
+
+    require_local_management(request)
+    source = (f"Uploaded by {req.buyerName or 'the buyer'} from {req.source or 'pasted text'}, "
+              f"{date.today().isoformat()}")
+    with closing(conn()) as c:
+        try:
+            saved = save_rules(c, [r.model_dump() for r in req.rules], source=source)
+        except UploadError as e:
+            raise HTTPException(422, str(e)) from e
+    return {"saved": saved}
+
+
+@app.patch("/api/playbook/rules/{rule_id}")
+def patch_playbook_rule(rule_id: str, body: RulePatch, request: Request):
+    from agent.uploads import UploadError, update_rule
+
+    require_local_management(request)
+    with closing(conn()) as c:
+        try:
+            return update_rule(c, _uploaded_id(rule_id), **body.model_dump())
+        except KeyError as e:
+            raise HTTPException(404, f"{rule_id} is not an uploaded rule.") from e
+        except UploadError as e:
+            raise HTTPException(422, str(e)) from e
+
+
+@app.delete("/api/playbook/rules/{rule_id}")
+def delete_playbook_rule(rule_id: str, request: Request):
+    from agent.uploads import delete_rule
+
+    require_local_management(request)
+    with closing(conn()) as c:
+        try:
+            delete_rule(c, _uploaded_id(rule_id))
+        except KeyError as e:
+            raise HTTPException(404, f"{rule_id} is not an uploaded rule.") from e
+    return {"ok": True}
+
+
 @app.get("/api/eval-runs")
 def eval_runs():
     keep = (
         "label",
         "time",
         "model",
+        "base_url",
         "n_emails",
         "n_gold_pos",
         "missed",

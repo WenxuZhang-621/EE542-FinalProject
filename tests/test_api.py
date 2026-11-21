@@ -94,6 +94,20 @@ def test_order_detail_and_eval_runs(client):
     assert isinstance(client.get("/api/eval-runs").json(), list)
 
 
+def test_order_detail_ignores_emails_about_a_longer_po_number(client):
+    import run_pipeline as rp
+
+    client.post("/api/sync", json={"source": "samples"})
+    other = {
+        "email_id": "longer-po", "from_addr": "sales@other.example.com", "thread_id": "t-longer",
+        "subject": "PO-2026-04125 shipped", "date": "2026-11-12T09:00:00+00:00",
+        "body_text": "PO-2026-04125 left the factory today.", "attachments": [],
+    }
+    rp.EMAILS_OUT.write_text(json.dumps([other]), encoding="utf-8")
+    ids = {e["id"] for e in client.get("/api/orders/PO-2026-0412").json()["emails"]}
+    assert "sample-001" in ids and "longer-po" not in ids
+
+
 def test_sync_without_key_is_a_clear_error(client, monkeypatch):
     monkeypatch.delenv("LLM_API_KEY")
     r = client.post("/api/sync", json={"source": "samples"})
@@ -248,3 +262,83 @@ def test_malformed_extraction_is_retryable_instead_of_empty(client, monkeypatch,
     monkeypatch.setattr(extract, "_call_llm", lambda msg: answer)
     with pytest.raises(extract.ExtractionError):
         extract.extract_one(rp.load_offline(SAMPLES)[0])
+
+
+def test_chat_returns_answer_tools_sources_and_drafts(client, monkeypatch):
+    import agent.chat
+    from schema import FollowUpDraft
+
+    seen = {}
+
+    def fake_chat(conn, messages, **kw):
+        seen.update(messages=messages, **kw)
+        draft = FollowUpDraft("d-1", "PO-1", "a@b.example.com", "Re: PO-1", "Hello", "Late",
+                              rule_ids=["3"], email_ids=["e1"])
+        return {"answer": "PO-1 is late.", "tools_used": ["get_po(PO-1)"],
+                "sources": [{"type": "email", "emailId": "e1"}], "drafts": [draft]}
+
+    monkeypatch.setattr(agent.chat, "chat", fake_chat)
+    r = client.post("/api/chat", json={"messages": [{"role": "user", "content": "PO-1?"}], "buyerName": "Alex"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["answer"] == "PO-1 is late." and body["toolsUsed"] == ["get_po(PO-1)"]
+    assert body["drafts"] == [{
+        "id": "d-1", "po": "PO-1", "to": "a@b.example.com", "subject": "Re: PO-1", "body": "Hello", "why": "Late",
+        "sources": [{"type": "rule", "ruleId": "3"}, {"type": "email", "emailId": "e1"}],
+    }]
+    assert seen["messages"] == [{"role": "user", "content": "PO-1?"}] and seen["buyer_name"] == "Alex"
+
+
+def test_chat_errors_are_clear(client, monkeypatch):
+    import agent.chat
+    from agent.llm import LLMError
+
+    assert client.post("/api/chat", json={"messages": []}).status_code == 422
+    assert client.post("/api/chat", json={"messages": [{"role": "system", "content": "x"}]}).status_code == 422
+
+    def failing(conn, messages, **kw):
+        raise LLMError("down")
+
+    monkeypatch.setattr(agent.chat, "chat", failing)
+    r = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 502 and "model" in r.json()["detail"]
+    monkeypatch.delenv("LLM_API_KEY")
+    r = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 503 and "LLM_API_KEY" in r.json()["detail"]
+
+
+def test_playbook_upload_flow(client, monkeypatch):
+    import agent.uploads
+
+    client.base_url = "http://localhost"  # rule uploads are only accepted from the local app
+
+    monkeypatch.setattr(agent.uploads, "_default_split", lambda messages, schema: {"rules": [
+        {"title": "Escalate Alder", "text": "Copy ops on Alder delays over 5 days.", "applies_to": ["delayed"]}]})
+    builtin = client.get("/api/playbook").json()["rules"]
+    assert [r["id"] for r in builtin] == [str(n) for n in range(1, 9)]
+    assert all(r["origin"] == "builtin" and r["enabled"] for r in builtin)
+
+    preview = client.post("/api/playbook/preview", json={"text": "Alder delays over 5 days: copy ops."}).json()
+    assert preview["method"] == "model" and preview["rules"][0]["kinds"] == ["delayed"]
+
+    r = client.post("/api/playbook/rules", json={"rules": preview["rules"], "source": "policy.md", "buyerName": "Alex"})
+    assert r.status_code == 200, r.text
+    saved = r.json()["saved"][0]
+    assert saved["id"] == "U1" and saved["source"].startswith("Uploaded by Alex from policy.md, ")
+    assert client.get("/api/playbook").json()["rules"][-1]["id"] == "U1"
+
+    assert client.patch("/api/playbook/rules/U1", json={"enabled": False}).json()["enabled"] is False
+    assert client.patch("/api/playbook/rules/3", json={"enabled": False}).status_code == 403
+    assert client.patch("/api/playbook/rules/U7", json={"enabled": False}).status_code == 404
+    assert client.patch("/api/playbook/rules/U1", json={"kinds": ["weather"]}).status_code == 422
+    assert client.delete("/api/playbook/rules/U1").json() == {"ok": True}
+    assert client.delete("/api/playbook/rules/U1").status_code == 404
+    assert client.post("/api/playbook/preview", json={"text": "  "}).status_code == 422
+    assert client.post("/api/playbook/rules", json={"rules": []}).status_code == 422
+
+
+def test_playbook_writes_reject_other_sites(client):
+    client.base_url = "http://localhost"
+    r = client.post("/api/playbook/rules", json={"rules": [{"text": "x" * 20}]},
+                    headers={"origin": "https://evil.example.com"})
+    assert r.status_code == 403
