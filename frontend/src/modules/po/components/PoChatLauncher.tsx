@@ -9,95 +9,84 @@ import {
     InputBase,
     Paper,
     Stack,
+    Tooltip,
     Typography,
     Zoom,
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import CloseIcon from '@mui/icons-material/Close';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
-import {
-    NEEDS_ATTENTION,
-    STATUS_META,
-    TODAY,
-    daysBetween,
-    summary,
-    supplierOf,
-    type PurchaseOrder,
-    type Source,
-} from '../data/sample';
+import { type FollowUpDraft, type Source } from '../data/sample';
+import { api, type ChatMessage } from '../api';
 import { usePoDemo } from '../store';
 import { usePoAuth } from '../auth';
 import { SourceChips } from './bits';
 
-type Msg = { role: 'user' | 'ai'; text: string; tools?: string[]; sources?: Source[] };
+type Msg = {
+    role: 'user' | 'ai';
+    text: string;
+    tools?: string[];
+    sources?: Source[];
+    drafts?: FollowUpDraft[];
+    /** shown in the panel but not sent back to the model (greeting, errors) */
+    local?: boolean;
+};
+
+const CHAT_HISTORY = 10; // messages sent per question, as many as the backend uses
+const MAX_MESSAGE_CHARS = 4000; // per message, the backend's limit
 
 const SUGGESTIONS = [
     'Which orders are at risk this week?',
     'Who has not replied yet?',
-    'What did Shenzhen Parts say about PO-2026-0412?',
-    'Should we accept the NB Plastics price increase?',
+    'What should I do about the latest delay?',
+    '这周哪些订单延误了？',
 ];
 
-function sourcesFor(o: PurchaseOrder): Source[] {
-    return o.lastEmailId ? [{ type: 'email', emailId: o.lastEmailId }] : [];
-}
-
-/** Scripted answers standing in for the real agent (tool calls + RAG) in this demo. */
-function answer(q: string, orders: PurchaseOrder[]): Msg {
-    const s = q.toLowerCase();
-    const risky = orders.filter((o) => NEEDS_ATTENTION.includes(o.status));
-    if (s.includes('repl')) {
-        const silent = orders.filter((o) => o.status === 'no_reply');
-        return {
-            role: 'ai',
-            tools: ['list_exceptions(kind=no_reply)', 'search_emails(supplier)'],
-            text:
-                silent
-                    .map((o) => `• ${o.po} · ${supplierOf(o.supplierId).name}: ${summary(o)}`)
-                    .join('\n') +
-                '\n\nI drafted a reminder for PO-2026-0398 (Follow-ups tab). For HK Electronics I suggest calling: last time they took 12 days to answer because their sales rep was travelling.',
-            sources: [
-                { type: 'rule', ruleId: '1' },
-                { type: 'email', emailId: 'e-0402-old' },
-            ],
-        };
-    }
-    if (s.includes('0412') || s.includes('shenzhen')) {
-        const o = orders.find((x) => x.po === 'PO-2026-0412')!;
-        return {
-            role: 'ai',
-            tools: ['get_po(PO-2026-0412)', 'search_emails(supplier=Shenzhen Parts)'],
-            text: `On Nov 10 Li Wei wrote that a factory holiday moves the ship date from Dec 1 to Dec 15; quantity stays at 500. ${summary(o)}.\n\nPer the playbook I drafted a follow-up asking for 300 pcs on Dec 1 and the rest by Dec 15.`,
-            sources: [{ type: 'email', emailId: 'e-0412-r1' }, { type: 'rule', ruleId: '2' }],
-        };
-    }
-    if (s.includes('price') || s.includes('plastics') || s.includes('0438')) {
-        return {
-            role: 'ai',
-            tools: ['get_po(PO-2026-0438)', 'search_playbook(price increase)'],
-            text: 'Not for this order. The increase is 2.40 → 2.65 USD (+10.4%) on a PO that was already placed at the quoted price. The playbook says to ask them to keep the old price for this PO, and to escalate to your manager because it is above 5%. A draft in Chinese is waiting in Follow-ups.',
-            sources: [{ type: 'rule', ruleId: '4' }, { type: 'email', emailId: 'e-0438-r1' }],
-        };
-    }
-    if (s.includes('risk') || s.includes('week') || s.includes('problem')) {
-        return {
-            role: 'ai',
-            tools: ['list_exceptions()', 'search_emails(po)'],
-            text:
-                `${risky.length} orders need attention:\n` +
-                risky
-                    .map((o) => `• ${o.po} · ${STATUS_META[o.status].label}: ${summary(o)}`)
-                    .join('\n') +
-                `\n\nMost urgent: PO-2026-0402 ships ${daysBetween(TODAY, '2026-11-30')} days from now and the supplier has not confirmed.`,
-            sources: risky.flatMap(sourcesFor).slice(0, 4),
-        };
-    }
-    return {
-        role: 'ai',
-        text: 'In this demo I answer a few scripted questions. Try one of the suggestions above.',
+/** A follow-up the clone drafted in this answer: shown for review, never sent from here. */
+function DraftCard({ d }: { d: FollowUpDraft }) {
+    const [copied, setCopied] = React.useState(false);
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(`Subject: ${d.subject}\n\n${d.body}`);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch {
+            /* clipboard not available */
+        }
     };
+    return (
+        <Paper elevation={0} sx={{ mt: 1, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                    Draft for {d.po} · to {d.to} · not sent
+                </Typography>
+                <Tooltip title={copied ? 'Copied' : 'Copy subject and body'}>
+                    <IconButton size="small" onClick={copy} aria-label="copy draft">
+                        <ContentCopyIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                </Tooltip>
+            </Stack>
+            <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                {d.subject}
+            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto' }}>
+                {d.body}
+            </Typography>
+            {d.why && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                    Why: {d.why}
+                </Typography>
+            )}
+            {d.sources.length > 0 && (
+                <Box sx={{ mt: 0.75 }}>
+                    <SourceChips sources={d.sources} />
+                </Box>
+            )}
+        </Paper>
+    );
 }
 
 function Bubble({ m }: { m: Msg }) {
@@ -115,10 +104,10 @@ function Bubble({ m }: { m: Msg }) {
                 {user ? <PersonOutlineIcon sx={{ fontSize: 18 }} /> : <AutoAwesomeIcon sx={{ fontSize: 17 }} />}
             </Avatar>
             <Box sx={{ maxWidth: '82%' }}>
-                {m.tools && (
-                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
-                        <BuildOutlinedIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
-                        <Typography variant="caption" color="text.secondary">
+                {m.tools && m.tools.length > 0 && (
+                    <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ mb: 0.5 }}>
+                        <BuildOutlinedIcon sx={{ fontSize: 13, color: 'text.secondary', mt: '2px' }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
                             {m.tools.join(' · ')}
                         </Typography>
                     </Stack>
@@ -137,6 +126,7 @@ function Bubble({ m }: { m: Msg }) {
                         {m.text}
                     </Typography>
                 </Paper>
+                {m.drafts?.map((d) => <DraftCard key={d.id} d={d} />)}
                 {m.sources && m.sources.length > 0 && (
                     <Box sx={{ mt: 0.75 }}>
                         <SourceChips sources={m.sources} />
@@ -148,7 +138,7 @@ function Bubble({ m }: { m: Msg }) {
 }
 
 export function PoChatLauncher() {
-    const { orders } = usePoDemo();
+    const { live } = usePoDemo();
     const { user } = usePoAuth();
     const firstName = user?.name.split(' ')[0] || 'there';
     const [open, setOpen] = React.useState(false);
@@ -157,6 +147,7 @@ export function PoChatLauncher() {
     const [msgs, setMsgs] = React.useState<Msg[]>([
         {
             role: 'ai',
+            local: true,
             text: `Hi ${firstName}, I'm your senior expediter. I know every open PO, the supplier emails, and the team's playbook. Ask me anything about your orders.`,
         },
     ]);
@@ -170,11 +161,34 @@ export function PoChatLauncher() {
         const text = q.trim();
         if (!text || busy) return;
         setInput('');
-        setMsgs((m) => [...m, { role: 'user', text }]);
+        const history: Msg[] = [...msgs, { role: 'user', text }];
+        setMsgs(history);
+        if (!live) {
+            setMsgs((m) => [
+                ...m,
+                {
+                    role: 'ai',
+                    local: true,
+                    text: 'Chat needs the backend: start it with `python -m uvicorn api.main:app --port 8000` and reload the page.',
+                },
+            ]);
+            return;
+        }
         setBusy(true);
-        await new Promise((r) => setTimeout(r, 900));
-        setMsgs((m) => [...m, answer(text, orders)]);
-        setBusy(false);
+        try {
+            // The backend reads only the last 10 messages (agent/chat.py MAX_HISTORY) of at most
+            // 4,000 characters; sending more would hit the API's 40-message limit after 20 turns.
+            const conversation: ChatMessage[] = history
+                .filter((m) => !m.local)
+                .slice(-CHAT_HISTORY)
+                .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text.slice(0, MAX_MESSAGE_CHARS) }));
+            const r = await api.chat(conversation, user?.name);
+            setMsgs((m) => [...m, { role: 'ai', text: r.answer, tools: r.toolsUsed, sources: r.sources, drafts: r.drafts }]);
+        } catch (e) {
+            setMsgs((m) => [...m, { role: 'ai', local: true, text: `Sorry, I could not answer: ${(e as Error).message}` }]);
+        } finally {
+            setBusy(false);
+        }
     };
 
     return (
@@ -187,8 +201,8 @@ export function PoChatLauncher() {
                         right: { xs: 12, sm: 24 },
                         bottom: { xs: 12, sm: 24 },
                         zIndex: (t) => t.zIndex.drawer + 1,
-                        width: { xs: 'calc(100vw - 24px)', sm: 420 },
-                        height: { xs: '75vh', sm: 620 },
+                        width: { xs: 'calc(100vw - 24px)', sm: 440 },
+                        height: { xs: '75vh', sm: 640 },
                         borderRadius: 4,
                         display: 'flex',
                         flexDirection: 'column',
@@ -209,7 +223,7 @@ export function PoChatLauncher() {
                                 Ask the expediter
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                Digital clone of a senior expediter · scripted demo answers
+                                Digital clone of a senior expediter · answers from your orders, emails and playbook
                             </Typography>
                         </Box>
                         <IconButton onClick={() => setOpen(false)} aria-label="close chat">
@@ -222,14 +236,14 @@ export function PoChatLauncher() {
                         ))}
                         {busy && (
                             <Typography variant="caption" color="text.secondary" sx={{ pl: 5 }}>
-                                Checking orders and emails…
+                                Checking orders, emails and the playbook…
                             </Typography>
                         )}
                         <div ref={end} />
                     </Stack>
                     <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ px: 2, pb: 1 }}>
                         {SUGGESTIONS.map((s) => (
-                            <Chip key={s} size="small" label={s} onClick={() => ask(s)} variant="outlined" />
+                            <Chip key={s} size="small" label={s} onClick={() => ask(s)} variant="outlined" disabled={busy} />
                         ))}
                     </Stack>
                     <Stack
@@ -242,14 +256,16 @@ export function PoChatLauncher() {
                             sx={{ flex: 1, fontSize: 14 }}
                             placeholder="Ask about any order or supplier"
                             value={input}
+                            inputProps={{ maxLength: MAX_MESSAGE_CHARS }}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter') ask(input);
+                                if (e.key === 'Enter' && !e.nativeEvent.isComposing) ask(input);
                             }}
                         />
                         <IconButton
                             size="small"
                             onClick={() => ask(input)}
+                            disabled={busy}
                             sx={{ bgcolor: 'primary.main', color: '#fff', '&:hover': { bgcolor: 'primary.dark' } }}
                             aria-label="send"
                         >

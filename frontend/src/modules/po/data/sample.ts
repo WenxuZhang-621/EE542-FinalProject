@@ -48,7 +48,17 @@ export type PurchaseOrder = {
     lastEmailId?: string;
 };
 
-export type PlaybookRule = { id: string; title: string; text: string; source: string };
+export type PlaybookRule = {
+    id: string;
+    title: string;
+    text: string;
+    source: string;
+    /** from the backend playbook (GET /api/playbook) */
+    kinds?: string[];
+    checked?: string;
+    origin?: 'builtin' | 'uploaded';
+    enabled?: boolean;
+};
 
 export type Source =
     | { type: 'rule'; ruleId: string }
@@ -402,8 +412,14 @@ export function emailOf(id?: string) {
     return EMAILS.find((e) => e.id === id);
 }
 
-export function ruleOf(id: string) {
-    return PLAYBOOK.find((r) => r.id === id)!;
+/** Swap the bundled sample rules for the backend's playbook (GET /api/playbook). */
+export function replacePlaybook(rules: PlaybookRule[]) {
+    PLAYBOOK.splice(0, PLAYBOOK.length, ...rules);
+}
+
+/** A playbook rule, or undefined when the id is not in the loaded playbook. */
+export function ruleOf(id: string): PlaybookRule | undefined {
+    return PLAYBOOK.find((r) => r.id === id);
 }
 
 export function fmtDate(iso?: string) {

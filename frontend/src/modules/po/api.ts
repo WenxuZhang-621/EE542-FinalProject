@@ -1,5 +1,5 @@
 // Calls to the FastAPI layer (api/main.py). Next.js forwards /api/* to it in development.
-import type { Email, PurchaseOrder, Supplier } from './data/sample';
+import type { Email, FollowUpDraft, PlaybookRule, PurchaseOrder, Source, Supplier } from './data/sample';
 
 export type OrdersResponse = { orders: PurchaseOrder[]; suppliers: Supplier[]; emails: Email[]; generatedAt: string };
 export type OrderDetailResponse = {
@@ -45,6 +45,10 @@ export type EvalRun = {
     avg_seconds: number;
     field_accuracy: Record<string, number>;
 };
+export type RuleDraft = { title: string; text: string; kinds: string[] };
+export type RulePreview = { rules: RuleDraft[]; method: string; note: string };
+export type ChatMessage = { role: 'user' | 'assistant'; content: string };
+export type ChatResponse = { answer: string; toolsUsed: string[]; sources: Source[]; drafts: FollowUpDraft[] };
 export type Health = { ok: boolean; llm_configured: boolean; llm_model: string; gmail_configured: boolean; orders: number };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -85,6 +89,36 @@ export const api = {
         form.append('file', file, name);
         return call<ImportResponse>('/api/po-list', { method: 'POST', body: form });
     },
+    /** Ask the expediter clone; send the whole conversation, the backend keeps no chat state. */
+    chat: (messages: ChatMessage[], buyerName?: string) =>
+        call<ChatResponse>('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages, buyerName }),
+        }),
+    /** Built-in playbook rules, then the company rules users uploaded (with `enabled`). */
+    playbook: () => call<{ rules: PlaybookRule[] }>('/api/playbook'),
+    /** Split pasted text or a .md/.txt file into rules for review; nothing is saved. */
+    previewRules: (text: string, filename?: string) =>
+        call<RulePreview>('/api/playbook/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, filename }),
+        }),
+    saveRules: (rules: RuleDraft[], source?: string, buyerName?: string) =>
+        call<{ saved: PlaybookRule[] }>('/api/playbook/rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rules, source, buyerName }),
+        }),
+    updateRule: (id: string, patch: Partial<RuleDraft> & { enabled?: boolean }) =>
+        call<PlaybookRule>(`/api/playbook/rules/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch),
+        }),
+    deleteRule: (id: string) =>
+        call<{ ok: boolean }>(`/api/playbook/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     evalRuns: () => call<EvalRun[]>('/api/eval-runs'),
     reset: () => call<{ ok: boolean }>('/api/reset', { method: 'POST' }),
 };

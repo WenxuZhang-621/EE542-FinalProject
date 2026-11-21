@@ -33,19 +33,21 @@ export function SourceChips({ sources }: { sources: Source[] }) {
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
             {sources.map((s) => {
                 if (s.type === 'rule') {
+                    // Rules come from the backend playbook; an id the page has not loaded still gets a chip.
                     const r = ruleOf(s.ruleId);
+                    const name = /^\d+$/.test(s.ruleId) ? `Playbook §${s.ruleId}` : `Your rule ${s.ruleId}`;
                     return (
-                        <Tooltip key={`r${s.ruleId}`} title={`${r.text} — ${r.source}`} arrow>
+                        <Tooltip key={`r${s.ruleId}`} title={r ? `${r.text} — ${r.source}` : name} arrow>
                             <Chip
                                 size="small"
                                 variant="outlined"
                                 icon={<MenuBookOutlinedIcon />}
-                                label={`Playbook §${r.id} · ${r.title}`}
+                                label={r ? `${name} · ${r.title}` : name}
                             />
                         </Tooltip>
                     );
                 }
-                const e = emailOf(s.emailId)!;
+                const e = emailOf(s.emailId);
                 if (!e) return null;
                 return (
                     <Tooltip key={`e${s.emailId}`} title={e.subject} arrow>
