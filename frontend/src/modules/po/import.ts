@@ -52,7 +52,7 @@ export type ImportRow = {
     currency: string;
     sentDate: string;
     requestedDate: string;
-    kind: 'new' | 'tracked' | 'error';
+    kind: 'new' | 'completed' | 'tracked' | 'error';
     error?: string;
     statusAfter?: PoStatus;
     newSupplier?: boolean;
@@ -160,7 +160,8 @@ export function analyse(text: string, existing: PurchaseOrder[]) {
         if (!requestedDate) problems.push('requested_ship_date must be YYYY-MM-DD or M/D/YYYY');
         seen.add(po);
         if (problems.length) return { ...row, kind: 'error', error: problems.join('; ') };
-        if (existing.some((o) => o.po === po)) return { ...row, kind: 'tracked' };
+        const previous = existing.find((o) => o.po === po);
+        if (previous) return { ...row, kind: previous.status === 'unmatched' ? 'completed' : 'tracked' };
         return {
             ...row,
             statusAfter: statusForNewPo(row.sentDate),

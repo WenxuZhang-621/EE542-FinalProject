@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     supplier_email     TEXT,
     item               TEXT,
     sent_date          TEXT,
-    requested_date     TEXT
+    requested_date     TEXT,
+    in_po_list         INTEGER NOT NULL DEFAULT 0 CHECK (in_po_list IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -107,4 +108,11 @@ def connect(path: str = DB_PATH) -> sqlite3.Connection:
     for column in _PO_LIST_COLUMNS:
         if column not in have:
             conn.execute(f"ALTER TABLE purchase_orders ADD COLUMN {column} TEXT")
+    if "in_po_list" not in have:
+        conn.execute("ALTER TABLE purchase_orders ADD COLUMN in_po_list INTEGER NOT NULL DEFAULT 0")
+        # Only the old importers wrote these fields; email extraction did not.
+        conn.execute("UPDATE purchase_orders SET in_po_list=1 "
+                     "WHERE requested_date IS NOT NULL AND sent_date IS NOT NULL "
+                     "AND supplier_email IS NOT NULL AND supplier_email <> ''")
+        conn.commit()
     return conn

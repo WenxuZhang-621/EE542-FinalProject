@@ -47,7 +47,8 @@ def test_two_accounts_with_same_gmail_id_sync_independently(workspace, monkeypat
     second = store.add("two@example.com", fake_credentials())
     calls = []
 
-    def fetch(since, *, service, query, expected_account):
+    def fetch(since, *, service, query, expected_account, supplier_emails):
+        assert supplier_emails == ["supplier@example.com"]
         calls.append(expected_account)
         mid = first if expected_account == "one@example.com" else second
         assert service["token_file"].name == f"{mid}.json"
@@ -61,6 +62,11 @@ def test_two_accounts_with_same_gmail_id_sync_independently(workspace, monkeypat
         change_type=ChangeType.NONE, source_email_id=m.email_id,
     )], 0.01))
     with TestClient(api.app, base_url="http://localhost:8000") as c:
+        with api.conn() as connection:
+            connection.executemany("INSERT INTO purchase_orders "
+                                   "(po_number,supplier,supplier_email,status,in_po_list) "
+                                   "VALUES (?,'Supplier','supplier@example.com','pending',1)",
+                                   [("PO-ONE",), ("PO-TWO",)])
         for mid in (first, second):
             result = c.post("/api/sync", json={"source": "gmail", "mailboxId": mid})
             assert result.status_code == 200, result.text
@@ -137,6 +143,10 @@ def test_missing_authorization_file_requires_reconnect(workspace, monkeypatch):
 
     monkeypatch.setattr(ingest, "gmail_service", unexpected)
     with TestClient(api.app, base_url="http://localhost:8000") as c:
+        with api.conn() as connection:
+            connection.execute("INSERT INTO purchase_orders "
+                               "(po_number,supplier,supplier_email,status,in_po_list) "
+                               "VALUES ('PO-1','Supplier','supplier@example.com','pending',1)")
         result = c.post("/api/sync", json={"source": "gmail", "mailboxId": mid})
         assert result.status_code == 503
         assert "Settings > Mailboxes" in result.json()["detail"]

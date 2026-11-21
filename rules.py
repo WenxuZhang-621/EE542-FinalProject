@@ -272,10 +272,13 @@ def sync_exceptions(
             unit_price=row["unit_price"],
             currency=row["currency"],
         )
-        for row in conn.execute("SELECT * FROM purchase_orders")
+        for row in conn.execute("SELECT * FROM purchase_orders WHERE in_po_list = 1")
     ]
     history = [
         POExtraction.from_dict(json.loads(row["data"]))
         for row in conn.execute("SELECT data FROM extractions ORDER BY email_date, id")
     ]
+    # Clear legacy exceptions created before imported baselines were distinguished.
+    conn.execute("DELETE FROM exceptions WHERE po_number IN "
+                 "(SELECT po_number FROM purchase_orders WHERE in_po_list = 0)")
     return refresh_exceptions(conn, orders, history, emails=emails, as_of=as_of)

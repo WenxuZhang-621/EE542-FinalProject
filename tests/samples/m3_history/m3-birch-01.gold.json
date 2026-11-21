@@ -1,0 +1,17 @@
+[
+  {
+    "po_number": "PO-M3-BIRCH-HISTORY",
+    "supplier": "Birch Fasteners",
+    "status": "price_change",
+    "change_type": "price_change",
+    "source_email_id": "m3-birch-01",
+    "original_date": null,
+    "confirmed_date": null,
+    "quantity_ordered": null,
+    "quantity_confirmed": null,
+    "unit_price": 2.2,
+    "currency": "USD",
+    "confidence": 1.0,
+    "notes": ""
+  }
+]

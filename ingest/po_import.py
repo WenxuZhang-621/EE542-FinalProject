@@ -1,4 +1,4 @@
-"""Validate CSV/XLSX purchase orders and insert new rows without overwriting orders."""
+"""Validate CSV/XLSX orders, complete unmatched POs, and preserve imported terms."""
 
 from __future__ import annotations
 
@@ -72,11 +72,30 @@ class ImportResult:
     def errors(self):
         return sum(row["kind"] == "error" for row in self.rows) + len(self.file_errors)
 
+    @property
+    def completed(self):
+        return sum(row["kind"] == "completed" for row in self.rows)
+
+    def to_api_dict(self):
+        """Keep the existing HTTP import contract; completed rows are separate."""
+        groups = {kind: [] for kind in ("new", "tracked", "completed", "errors")}
+        for row in self.rows:
+            groups["errors" if row["kind"] == "error" else row["kind"]].append({
+                "line": row["line"], "po_number": row["po"],
+                "supplier": row["supplierName"], "supplier_email": row["supplierEmail"],
+                "item": row["item"], "quantity": row["qty"], "unit_price": row["unitPrice"],
+                "currency": row["currency"], "sent_date": row["sentDate"],
+                "requested_date": row["requestedDate"], "kind": row["kind"],
+                "error": row.get("error", ""),
+            })
+        return {**groups, "missing_columns": self.missing}
+
     def to_dict(self):
         return {
             **asdict(self),
             "added": self.added,
             "existing": self.existing,
+            "completed": self.completed,
             "errors": self.errors,
         }
 
@@ -203,9 +222,7 @@ def import_po_list(
     today = as_of or date.today()
     seen = set()
     try:
-        existing = {
-            row[0] for row in conn.execute("SELECT po_number FROM purchase_orders")
-        }
+        existing = dict(conn.execute("SELECT po_number, in_po_list FROM purchase_orders"))
         suppliers = {
             row[0] for row in conn.execute("SELECT supplier_email FROM purchase_orders")
         }
@@ -257,9 +274,10 @@ def import_po_list(
                     )
             if problems:
                 row.update(kind="error", error="; ".join(problems))
-            elif po in existing:
+            elif existing.get(po):
                 row["kind"] = "tracked"
             else:
+                row["kind"] = "completed" if po in existing else "new"
                 order = PurchaseOrder(
                     po,
                     row["supplierName"] or email.split("@")[1],
@@ -280,8 +298,14 @@ def import_po_list(
                 if not preview:
                     inserted = conn.execute(
                         "INSERT INTO purchase_orders (po_number, supplier, supplier_email, item, "
-                        "quantity_ordered, unit_price, currency, sent_date, requested_date, original_date, status) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending') ON CONFLICT(po_number) DO NOTHING",
+                        "quantity_ordered, unit_price, currency, sent_date, requested_date, original_date, status, in_po_list) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1) "
+                        "ON CONFLICT(po_number) DO UPDATE SET "
+                        "supplier=excluded.supplier, supplier_email=excluded.supplier_email, item=excluded.item, "
+                        "quantity_ordered=excluded.quantity_ordered, unit_price=excluded.unit_price, "
+                        "currency=excluded.currency, sent_date=excluded.sent_date, "
+                        "requested_date=excluded.requested_date, original_date=excluded.original_date, in_po_list=1 "
+                        "WHERE purchase_orders.in_po_list=0",
                         (
                             order.po_number,
                             order.supplier,
@@ -297,9 +321,15 @@ def import_po_list(
                     )
                     if not inserted.rowcount:
                         row["kind"] = "tracked"
-                existing.add(po)
+                existing[po] = 1
                 suppliers.add(email)
             result.rows.append(row)
+        if not preview:
+            from rules import sync_exceptions
+            from schema import EmailMessage
+            emails = [EmailMessage.from_dict(json.loads(r[0]))
+                      for r in conn.execute("SELECT data FROM email_messages")]
+            sync_exceptions(conn, emails=emails, as_of=as_of)
         if own_connection:
             conn.commit()
         return result

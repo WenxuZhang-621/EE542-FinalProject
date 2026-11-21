@@ -118,7 +118,8 @@ def test_gold_sync_works_without_a_key(client, monkeypatch):
     monkeypatch.delenv("LLM_API_KEY")
     r = client.post("/api/sync", json={"source": "gold"}).json()
     assert r["source"] == "gold" and r["newEmails"] > 0 and "reference answers" in r["note"]
-    assert client.get("/api/orders/PO-2026-0412").json()["order"]["status"] == "delayed"
+    order = client.get("/api/orders/PO-2026-0412").json()["order"]
+    assert order["status"] == "unmatched" and order["exceptions"] == []
 
 
 def test_po_list_rejects_missing_columns(client):
@@ -342,3 +343,22 @@ def test_playbook_writes_reject_other_sites(client):
     r = client.post("/api/playbook/rules", json={"rules": [{"text": "x" * 20}]},
                     headers={"origin": "https://evil.example.com"})
     assert r.status_code == 403
+
+
+def test_import_completes_synced_orders_and_returns_original_contract(client):
+    client.post("/api/sync", json={"source": "gold"})
+    csv = (ROOT / "frontend/public/samples/po_list_sample.csv").read_bytes()
+    response = client.post("/api/po-list", files={"file": ("po.csv", csv, "text/csv")})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert {"new", "tracked", "completed", "errors", "missing_columns"} <= result.keys()
+    assert "PO-2026-0412" in {r["po_number"] for r in result["completed"]}
+    order = client.get("/api/orders/PO-2026-0412").json()["order"]
+    assert order["inPoList"] and order["status"] == "delayed"
+    assert order["requestedDate"] == "2026-12-01" and order["currentDate"] == "2026-12-15"
+
+
+def test_import_damaged_excel_returns_readable_error(client):
+    response = client.post("/api/po-list", files={"file": ("broken.xlsx", b"not excel")})
+    assert response.status_code == 400
+    assert "invalid or damaged" in response.json()["detail"]

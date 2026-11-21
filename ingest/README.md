@@ -1,7 +1,9 @@
-# M2 data ingestion (A)
+# M2/M3 data ingestion (A)
 
-This module reads Gmail with `gmail.readonly` and imports the original purchase-order
-terms. `EmailMessage` and `POExtraction` remain compatible with B's extraction code.
+This module reads supplier Gmail messages, imports original purchase-order terms, and
+saves approved follow-up drafts in the source mailbox. `EmailMessage` and `POExtraction`
+remain compatible with B's extraction code. See [the M3 handoff](../docs/m3-a-handoff.md)
+for the draft interface and C's remaining approval UI integration.
 
 ## Setup
 
@@ -27,7 +29,7 @@ Each teammate should authorize their own account.
 3. Under **Clients**, create a **Desktop app** OAuth client. Download its JSON as
    `credentials.json` in the repository root.
 4. Set `GMAIL_TEST_ACCOUNT` in `.env` to the exact Gmail account to authorize.
-5. Run the following and approve read-only access in the browser:
+5. Run the following and approve Gmail read and compose access in the browser:
 
 ```powershell
 .\.venv\Scripts\python.exe ingest/fetch_emails.py --auth-only
@@ -36,7 +38,9 @@ Each teammate should authorize their own account.
 The local callback writes `token.json`. Account mismatch stops before reading messages.
 Testing-mode refresh tokens can expire; if Google rejects an expired/revoked token,
 run `--auth-only` again to reauthorize, keeping tokens out of Git.
-Do not widen the scope to send or modify messages for M2.
+M2 used only `gmail.readonly`. M3 adds `gmail.compose` to create drafts; reconnect old
+read-only accounts. Google's compose permission also includes sending, but this
+application's draft module only calls `drafts.create` and has no sending endpoint.
 
 Official references:
 - https://developers.google.com/workspace/gmail/api/quickstart/python
@@ -55,7 +59,9 @@ macros are not executed. Legacy `.xls` is not supported. Dates accept real calen
 dates in `YYYY-MM-DD` or `M/D/YYYY`, including native Excel date cells. Quantity must
 be finite and positive; unit price must be finite and nonnegative. Missing or duplicate
 headers prevent the entire import. Other invalid rows are reported and skipped.
-Existing PO numbers are reported as `tracked` and never overwritten.
+Already imported PO numbers are reported as `tracked` and never overwritten.
+Email-created POs are reported as `completed`: the import fills their original terms
+and sets `in_po_list=1`, preserving supplier-confirmed values and source history.
 
 Column names and aliases match `frontend/src/modules/po/import.ts`. `supplier` is
 optional, as in the frontend, and falls back to the email domain. Note that backend
@@ -68,13 +74,14 @@ For C's synchronous FastAPI endpoint (or an async endpoint via `run_in_threadpoo
 from ingest.po_import import import_po_list
 
 result = import_po_list(upload_file)  # path, UploadFile or binary stream
-return result.to_dict()
+return result.to_api_dict()
 ```
 
-The result has `rows`, `missing`, `file_errors`, `added`, `existing`, `errors` and
-`preview`. Each row has the frontend fields `line`, `po`, `supplierName`,
+The CLI's `to_dict()` result has `rows`, `missing`, `file_errors`, `added`, `existing`,
+`completed`, `errors` and `preview`. The API adapter preserves its `new`, `tracked`,
+`errors`, `missing_columns` arrays and adds `completed`. Each CLI row has `line`, `po`, `supplierName`,
 `supplierEmail`, `item`, `qty`, `unitPrice`, `currency`, `sentDate`, `requestedDate`,
-`kind` (`new`, `tracked`, `error`) and an `error` reason if needed. On a preview call,
+`kind` (`new`, `completed`, `tracked`, `error`) and an `error` reason if needed. On a preview call,
 `added` means eligible new rows; no orders are written. With an explicitly supplied
 SQLite `conn`, the caller owns the transaction and must commit.
 
@@ -82,7 +89,8 @@ CSV `requested_ship_date` maps to `PurchaseOrder.requested_date` and the databas
 `requested_date`; `quantity` maps to `quantity_ordered`. Original price, quantity and
 requested date are stored as rule baselines. New rows use backend status `pending`;
 the preview's `statusAfter` uses frontend `awaiting` / `no_reply`. Actual exceptions
-are recomputed by `run_pipeline.py` after sync, not persisted by preview.
+are recomputed after a real import and by `run_pipeline.py` after sync, never persisted
+by preview. Only imported POs can produce exceptions.
 
 ## Shared test fixture
 
@@ -107,12 +115,13 @@ can be sent from a **different test account** into the authorized inbox. They ha
 real suppliers or customer data. Do not send any message mentioning `0011`-`0013`.
 The Gmail reader excludes Sent and Drafts, so self-sent messages are intentionally
 excluded and must not be used for this demo. Sending test email is a separate action;
-this module has no send endpoint and no send scope.
+this module has no send endpoint. The M3 compose scope includes sending capability,
+but the application only uses it to save drafts after approval.
 
 ## Fetch and integrate
 
 For browser account management, open **Settings > Mailboxes** in the local frontend.
-Each account gets its own Google read-only authorization. Choose a default mailbox or
+Each account gets its own Google read and compose authorization. Choose a default mailbox or
 select an account when syncing; the previous `.env` account is adopted once automatically.
 New token files live under the database directory's ignored `mailbox_tokens/` folder.
 Disconnect disables an account without removing its history or revoking Google's grant.
@@ -139,13 +148,13 @@ digital PDF and Excel attachment text. An unreadable/unsupported attachment rema
 in the output with empty text; parse failures are logged. Scanned PDF OCR is not included.
 Fetching only the last seven days does not establish a complete historical inbox; for
 older imported orders, backfill from their sent dates before interpreting no-reply.
+Only sender addresses in the imported PO list are fetched. An empty allowlist returns
+no messages without contacting Gmail; the live HTTP endpoint returns 409 with an
+import-first instruction. Optional Gmail queries cannot bypass the sender allowlist.
 
-C's API and frontend integration landed on main at `78860d0` while this contribution
-was being prepared. `/api/sync` already calls this module's `fetch(since)` function.
-The current `/api/po-list` route still uses C's separate `api/po_list.py` importer;
-switching it to `import_po_list` requires adapting the response contract shown above.
-That initial contribution was verified through the Python pipeline and Streamlit viewer.
-The subsequent web integration adds **Orders → Sync inbox → Read Gmail**. The dialog shows
+C's initial API and frontend integration landed on main at `78860d0`. M3 consolidates
+`/api/po-list` on this module's `import_po_list` and removes `api/po_list.py`.
+The web integration provides **Orders → Sync inbox → Read Gmail**. The dialog shows
 the configured account, accepts a time range and Gmail search filter, and refreshes the
 orders after extraction. Use `GMAIL_QUERY=subject:M2-DEMO` for a default test-only filter.
 The API uses noninteractive OAuth refresh and returns instructions if reauthorization is
@@ -161,3 +170,7 @@ needed. It does not open a browser or silently fall back to sample mail during H
 `check_m2.py` uses a fresh temporary SQLite database and **gold extractions**, verifies
 import repeatability and the seven expected exceptions, and writes `data/m2_check.json`.
 It is a deterministic integration check, not live Gmail proof or model accuracy.
+
+For M3, `tests/samples/m3_history/` provides 15 fictional messages, six POs and labelled
+extractions covering resolved historical incidents and current delay, price increase
+and stock shortage. See its README for regeneration and controlled-inbox setup.

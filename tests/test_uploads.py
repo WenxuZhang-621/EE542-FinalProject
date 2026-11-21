@@ -95,7 +95,7 @@ def test_simple_split_without_the_model():
     ("x" * (MAX_TEXT_CHARS + 1), "too long"),
     ("Hi", "No rules"),
     ("## §1 Broken\n- Applies to: all\n", "playbook format"),
-])
+], ids=["empty", "too-long", "no-rules", "broken-format"])
 def test_unusable_text_is_rejected(text, message):
     with pytest.raises(UploadError, match=message):
         preview_rules(text, use_llm=False)

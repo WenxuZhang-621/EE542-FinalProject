@@ -54,10 +54,10 @@ def upsert(conn, ext: POExtraction) -> None:
         merged = {c: (new[c] if new[c] is not None else prev[c]) for c in COLUMNS}
         merged["original_date"] = prev["original_date"] or new["original_date"]
         merged["quantity_ordered"] = prev["quantity_ordered"] or new["quantity_ordered"]
-        if prev["sent_date"] and prev["unit_price"] is not None:
-            # Imported from the PO list: keep the ordered price as the baseline that
-            # rules.py compares against. The supplier's new price is in events/exceptions.
-            merged["unit_price"], merged["currency"] = prev["unit_price"], prev["currency"]
+        if prev["in_po_list"]:
+            # Imported terms, including zero prices, never come from supplier claims.
+            for column in ("original_date", "quantity_ordered", "unit_price", "currency"):
+                merged[column] = prev[column]
         conn.execute(
             "UPDATE purchase_orders SET " + ", ".join(f"{c} = ?" for c in COLUMNS)
             + ", last_email_id = ?, updated_at = CURRENT_TIMESTAMP WHERE po_number = ?",

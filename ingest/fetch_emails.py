@@ -1,9 +1,10 @@
-"""Read Gmail messages and attachments using gmail.readonly."""
+"""Read supplier Gmail messages and attachments for imported purchase orders."""
 
 from __future__ import annotations
 
 import argparse
 import base64
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from email.message import Message
 from email.utils import parsedate_to_datetime, parseaddr
@@ -19,8 +20,27 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from schema import Attachment, EmailMessage
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/gmail.readonly",
+          "https://www.googleapis.com/auth/gmail.compose"]
 LOG = logging.getLogger(__name__)
+SUPPLIER_BATCH_SIZE = 25
+
+
+def has_required_scopes(credentials):
+    """Check granted/saved scopes, never inject new scopes into an old credential."""
+    granted = credentials.granted_scopes
+    return set(SCOPES).issubset(granted if granted is not None else (credentials.scopes or []))
+
+
+def supplier_addresses(conn=None, *, db_path=None):
+    """Only imported PO contacts may enter the Gmail search allowlist."""
+    if conn is None:
+        from dashboard.db import connect
+        with closing(connect(db_path or os.getenv("DB_PATH", "data/po.sqlite"))) as connection:
+            return supplier_addresses(connection)
+    return sorted({r[0].strip().lower() for r in conn.execute(
+        "SELECT supplier_email FROM purchase_orders WHERE in_po_list=1"
+    ) if r[0] and r[0].strip()})
 
 
 def load_settings():
@@ -42,11 +62,12 @@ def gmail_service(*, interactive: bool = True, token_file: Path | None = None):
     token_path = token_file or ROOT / os.getenv("GMAIL_TOKEN_PATH", "token.json")
     creds = None
     if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
-        if not creds.has_scopes(SCOPES):
-            raise RuntimeError(
-                "Saved token lacks gmail.readonly. Reauthorize with a new token path."
-            )
+        creds = Credentials.from_authorized_user_file(str(token_path))
+        if not has_required_scopes(creds):
+            if not interactive:
+                raise RuntimeError("Reconnect this Gmail account in Settings > Mailboxes: "
+                                   "M3 requires read and compose access to save approved drafts.")
+            creds = None
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
@@ -71,9 +92,11 @@ def gmail_service(*, interactive: bool = True, token_file: Path | None = None):
                 access_type="offline",
                 prompt="consent",
                 timeout_seconds=300,
-                authorization_prompt_message="Complete Gmail read-only authorization in your browser.",
+                authorization_prompt_message="Authorize Gmail reading and saving approved drafts in your browser.",
                 success_message="Gmail authorization complete. You can close this tab.",
             )
+        if not has_required_scopes(creds):
+            raise RuntimeError("Gmail read and compose permissions were not both granted. Please reconnect.")
         token_path.parent.mkdir(parents=True, exist_ok=True)
         token_path.write_text(creds.to_json(), encoding="utf-8")
         if os.name != "nt":
@@ -89,8 +112,8 @@ def connection_status() -> dict:
     try:
         from google.oauth2.credentials import Credentials
 
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
-        authorized = creds.has_scopes(SCOPES) and bool(creds.valid or creds.refresh_token)
+        creds = Credentials.from_authorized_user_file(str(token_path))
+        authorized = has_required_scopes(creds) and bool(creds.valid or creds.refresh_token)
     except (OSError, ValueError, KeyError):
         authorized = False
     return {
@@ -269,44 +292,60 @@ def fetch(
     max_messages: int = 50,
     query: str = "",
     expected_account: str | None = None,
+    supplier_emails: list[str] | None = None,
+    db_path=None,
 ) -> list[EmailMessage]:
     load_settings()
+    allowed = set(supplier_addresses(db_path=db_path) if supplier_emails is None else
+                  (address.strip().lower() for address in supplier_emails))
+    if not allowed:
+        return []  # Do not authorize, list or read Gmail before importing a PO list.
+    if any(not re.fullmatch(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", address)
+           for address in allowed):
+        raise ValueError("Imported supplier emails contain an invalid search address.")
     expected_account = expected_account or os.getenv("GMAIL_TEST_ACCOUNT", "")
     if not expected_account:
         raise ValueError("Set GMAIL_TEST_ACCOUNT in .env before connecting Gmail.")
     if max_messages < 1:
         raise ValueError("max_messages must be positive")
     # Outbound POs and drafts must not suppress the no-reply exception.
-    search = f"{since_query(since)} -in:sent -in:drafts {query}".strip()
+    search = f"{since_query(since)} -in:sent -in:drafts"
+    if query.strip():
+        search += f" ({query.strip()})"
     service = service or gmail_service()
     verify_account(service, expected_account)
-    emails, seen, page_token = [], set(), None
-    while len(emails) < max_messages:
-        options = dict(
-            userId="me", q=search, maxResults=min(500, max_messages - len(emails))
-        )
-        if page_token:
-            options["pageToken"] = page_token
-        page = service.users().messages().list(**options).execute(num_retries=3)
-        for item in page.get("messages", []):
-            if item["id"] in seen:
-                continue
-            seen.add(item["id"])
-            message = (
-                service.users()
-                .messages()
-                .get(userId="me", id=item["id"], format="full")
-                .execute(num_retries=3)
-            )
-            if set(message.get("labelIds", [])) & {"SENT", "DRAFT"}:
-                continue
-            emails.append(parse_message(message, service))
-            if len(emails) >= max_messages:
+    emails, seen = [], set()
+    addresses = sorted(allowed)
+    for start in range(0, len(addresses), SUPPLIER_BATCH_SIZE):
+        batch = addresses[start:start + SUPPLIER_BATCH_SIZE]
+        filtered_search = search + " from:(" + " OR ".join(batch) + ")"
+        page_token, count = None, 0
+        while count < max_messages:
+            options = dict(userId="me", q=filtered_search, maxResults=min(500, max_messages-count))
+            if page_token:
+                options["pageToken"] = page_token
+            page = service.users().messages().list(**options).execute(num_retries=3)
+            for item in page.get("messages", []):
+                if item["id"] in seen:
+                    continue
+                seen.add(item["id"])
+                message = service.users().messages().get(
+                    userId="me", id=item["id"], format="full"
+                ).execute(num_retries=3)
+                if set(message.get("labelIds", [])) & {"SENT", "DRAFT"}:
+                    continue
+                # Gmail search is not an exact address comparison (display names/aliases).
+                sender = parseaddr(_headers(message.get("payload", {})).get("from", ""))[1].lower()
+                if sender not in allowed:
+                    continue
+                emails.append(parse_message(message, service))
+                count += 1
+                if count >= max_messages:
+                    break
+            page_token = page.get("nextPageToken")
+            if not page_token:
                 break
-        page_token = page.get("nextPageToken")
-        if not page_token:
-            break
-    return sorted(emails, key=lambda email: (email.date, email.email_id))
+    return sorted(emails, key=lambda email: (email.date, email.email_id))[-max_messages:]
 
 
 def main():
@@ -314,6 +353,7 @@ def main():
     parser.add_argument("--since", default="7d")
     parser.add_argument("--out", type=Path, default=ROOT / "data/emails.json")
     parser.add_argument("--max-messages", type=int, default=50)
+    parser.add_argument("--db", default=None, help="Database containing the imported PO list")
     parser.add_argument(
         "--query", default="", help="Additional Gmail search, e.g. subject:M2-DEMO"
     )
@@ -326,9 +366,9 @@ def main():
             if not account:
                 raise ValueError("Set GMAIL_TEST_ACCOUNT in .env first.")
             verify_account(gmail_service(), account)
-            print("Gmail read-only authorization and account check passed.")
+            print("Gmail read/compose authorization and account check passed.")
             return
-        messages = fetch(args.since, max_messages=args.max_messages, query=args.query)
+        messages = fetch(args.since, max_messages=args.max_messages, query=args.query, db_path=args.db)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(
             json.dumps(

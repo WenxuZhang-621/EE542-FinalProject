@@ -1,0 +1,38 @@
+{
+  "fictional": true,
+  "as_of": "2026-11-21",
+  "suppliers": 3,
+  "orders": 6,
+  "emails": [
+    "m3-alder-01",
+    "m3-alder-02",
+    "m3-alder-03",
+    "m3-alder-04",
+    "m3-alder-05",
+    "m3-birch-01",
+    "m3-birch-02",
+    "m3-birch-03",
+    "m3-birch-04",
+    "m3-birch-05",
+    "m3-cedar-01",
+    "m3-cedar-02",
+    "m3-cedar-03",
+    "m3-cedar-04",
+    "m3-cedar-05"
+  ],
+  "expected_active_exceptions": [
+    {
+      "po_number": "PO-M3-ALDER-CURRENT",
+      "kind": "delayed"
+    },
+    {
+      "po_number": "PO-M3-BIRCH-CURRENT",
+      "kind": "price_change"
+    },
+    {
+      "po_number": "PO-M3-CEDAR-CURRENT",
+      "kind": "out_of_stock"
+    }
+  ],
+  "note": "Gold answers verify ingestion and rules, not LLM accuracy. Real Gmail IDs/timestamps are assigned on delivery; historical dates remain explicit in the body."
+}

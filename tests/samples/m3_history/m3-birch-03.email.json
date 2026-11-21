@@ -1,0 +1,9 @@
+{
+  "email_id": "m3-birch-03",
+  "from_addr": "orders@birch.example.com",
+  "subject": "[M3-DEMO] PO-M3-BIRCH-CURRENT supplier update",
+  "date": "2026-11-11T09:00:00+00:00",
+  "body_text": "FICTIONAL CLASSROOM TEST - no real purchase or shipment.\nHistorical update dated 2026-11-11.\n\nHello buyer,\n\nWe confirm PO-M3-BIRCH-CURRENT: 500 units at USD 2.00 per unit, shipping on 2026-12-01. The price is fixed for this order.\n\nBest,\nBirch Fasteners",
+  "attachments": [],
+  "thread_id": "m3-thread-PO-M3-BIRCH-CURRENT"
+}

@@ -1,0 +1,7 @@
+po_number,supplier,supplier_email,item,quantity,unit_price,currency,sent_date,requested_ship_date
+PO-M3-ALDER-HISTORY,Alder Components,sales@alder.example.com,Chair frame,100,20.0,USD,2026-10-10,2026-10-31
+PO-M3-ALDER-CURRENT,Alder Components,sales@alder.example.com,Chair frame,100,20.0,USD,2026-11-09,2026-12-01
+PO-M3-BIRCH-HISTORY,Birch Fasteners,orders@birch.example.com,Fastener set,500,2.0,USD,2026-10-10,2026-10-31
+PO-M3-BIRCH-CURRENT,Birch Fasteners,orders@birch.example.com,Fastener set,500,2.0,USD,2026-11-09,2026-12-01
+PO-M3-CEDAR-HISTORY,Cedar Textiles,sales@cedar.example.com,Upholstery roll,200,8.0,USD,2026-10-10,2026-10-31
+PO-M3-CEDAR-CURRENT,Cedar Textiles,sales@cedar.example.com,Upholstery roll,200,8.0,USD,2026-11-09,2026-12-01

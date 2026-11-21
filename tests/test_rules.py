@@ -196,8 +196,8 @@ def test_sync_replays_stored_history_and_reset_clears_it(tmp_path):
     conn = db.connect(str(tmp_path / "test.sqlite"))
     conn.execute(
         "INSERT INTO purchase_orders (po_number, supplier, status, quantity_ordered,"
-        " unit_price, currency, sent_date, requested_date)"
-        " VALUES ('PO-100', 'parts', 'pending', 100, 2.4, 'USD', '2026-11-06', '2026-11-27')"
+        " unit_price, currency, sent_date, requested_date, in_po_list)"
+        " VALUES ('PO-100', 'parts', 'pending', 100, 2.4, 'USD', '2026-11-06', '2026-11-27', 1)"
     )
     email = reply(subject="Re: PO-100")
     late = update(email.email_id, confirmed_date="2026-12-11", unit_price=2.65, currency="USD")
