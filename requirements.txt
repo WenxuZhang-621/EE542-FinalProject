@@ -11,6 +11,9 @@ beautifulsoup4>=4.12
 # extract/ (P2) — OpenAI-compatible client, works with OpenAI, Qwen APIs and vLLM
 openai>=1.50
 
+# rag/ and agent/ — vector search over emails and the buyer playbook
+numpy>=1.26
+
 # dashboard/ (P3)
 streamlit>=1.50
 pandas>=2.2
