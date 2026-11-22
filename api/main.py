@@ -50,6 +50,7 @@ from rules import RULE_KINDS, sync_exceptions  # noqa: E402
 from schema import EmailMessage  # noqa: E402
 from ingest.mailboxes import MailboxStore, token_available  # noqa: E402
 from ingest.mailbox_oauth import sessions as oauth_sessions  # noqa: E402
+from api import drafts as draft_store  # noqa: E402
 
 SAMPLES = ROOT / "tests" / "samples"
 # Exceptions decide the status shown in the UI; the most urgent kind wins.
@@ -548,20 +549,6 @@ class ChatRequest(BaseModel):
     buyerName: str | None = Field(default=None, max_length=100)
 
 
-def draft_view(d) -> dict:
-    """A schema.FollowUpDraft in the front end's FollowUpDraft shape (data/sample.ts)."""
-    return {
-        "id": d.draft_id,
-        "po": d.po_number,
-        "to": d.to,
-        "subject": d.subject,
-        "body": d.body,
-        "why": d.why,
-        "sources": [{"type": "rule", "ruleId": r} for r in d.rule_ids]
-        + [{"type": "email", "emailId": e} for e in d.email_ids],
-    }
-
-
 @app.post("/api/chat")
 def post_chat(req: ChatRequest):
     """Ask the expediter clone. The page sends the whole conversation; nothing is stored."""
@@ -574,7 +561,9 @@ def post_chat(req: ChatRequest):
         )
     try:
         with closing(conn()) as c:
-            result = chat(c, [m.model_dump() for m in req.messages], buyer_name=req.buyerName)
+            result = chat(c, [m.model_dump() for m in req.messages], buyer_name=req.buyerName,
+                          on_draft=lambda d: draft_store.save(c, d))
+            c.commit()
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     except LLMError as e:
@@ -583,8 +572,104 @@ def post_chat(req: ChatRequest):
         "answer": result["answer"],
         "toolsUsed": result["tools_used"],
         "sources": result["sources"],
-        "drafts": [draft_view(d) for d in result["drafts"]],
+        "drafts": [draft_store.view(d) for d in result["drafts"]],
     }
+
+
+class ApproveRequest(BaseModel):
+    body: str | None = Field(default=None, max_length=20_000)
+
+
+class DraftRequest(BaseModel):
+    buyerName: str | None = Field(default=None, max_length=100)
+
+
+def _draft_or_404(c, draft_id: str):
+    d = draft_store.get(c, draft_id)
+    if d is None:
+        raise HTTPException(404, "This draft no longer exists. Reload the Follow-ups page.")
+    return d
+
+
+@app.get("/api/drafts")
+def list_drafts():
+    """Every follow-up draft, newest first: in review, saved to Gmail, or rejected."""
+    with closing(conn()) as c:
+        return {"drafts": [draft_store.view(d) for d in draft_store.all_drafts(c)]}
+
+
+@app.post("/api/orders/{po}/draft")
+def post_draft(po: str, req: DraftRequest | None = None):
+    """Ask the clone to write a follow-up for one PO with an open exception. Replaces that PO's
+    earlier draft if it is still in review."""
+    from agent.draft import DraftError, NoExceptionError, draft_followup
+    from agent.llm import LLMError
+
+    if not os.getenv("LLM_API_KEY"):
+        raise HTTPException(
+            503, "The drafting model is not configured. Set LLM_API_KEY and the model endpoint on the backend."
+        )
+    with closing(conn()) as c:
+        row = c.execute("SELECT in_po_list FROM purchase_orders WHERE po_number = ?", (po,)).fetchone()
+        if row is None:
+            raise HTTPException(404, f"{po} is not tracked")
+        if not row["in_po_list"]:
+            raise HTTPException(409, "Import this PO from your PO list before drafting a follow-up.")
+        try:
+            draft = draft_followup(c, po, buyer_name=(req.buyerName if req else None))
+        except NoExceptionError as e:
+            raise HTTPException(409, str(e)) from e
+        except (DraftError, LLMError) as e:
+            raise HTTPException(502, f"The clone could not write this draft. {e}") from e
+        draft_store.save(c, draft)
+        c.commit()
+        return draft_store.view(draft)
+
+
+@app.post("/api/drafts/{draft_id}/approve")
+def approve_draft(draft_id: str, req: ApproveRequest | None = None):
+    """Save the (possibly edited) draft to the Gmail drafts folder of the mailbox that received
+    the supplier's email, in that thread. Nothing is sent."""
+    from google.auth.exceptions import RefreshError
+    from ingest.gmail_drafts import DraftSaveError, save_draft
+
+    with closing(conn()) as c:
+        d = _draft_or_404(c, draft_id)
+        if d.state == "rejected":
+            raise HTTPException(409, "This draft was rejected. Write a new one from the order page.")
+        if d.state == "review" and req and req.body is not None:
+            if not req.body.strip():
+                raise HTTPException(422, "The draft body cannot be empty.")
+            d.body = req.body
+            draft_store.save(c, d, replace_open=False)
+            c.commit()  # keep the buyer's edit even if Gmail fails below
+        try:
+            gmail_id = save_draft(d, conn=c)
+        except DraftSaveError as e:
+            raise HTTPException(409, str(e)) from e
+        except RefreshError as e:
+            raise HTTPException(
+                401, "Gmail authorization has expired or lacks draft permission. "
+                "Reconnect the account in Settings > Mailboxes, then approve again."
+            ) from e
+        except Exception as e:  # network, quota, Gmail API errors
+            raise HTTPException(502, "Gmail could not save the draft. Your edit is kept; retry in a moment.") from e
+        d.state, d.gmail_draft_id = "saved", gmail_id
+        draft_store.save(c, d, replace_open=False)
+        c.commit()
+        return draft_store.view(d)
+
+
+@app.post("/api/drafts/{draft_id}/reject")
+def reject_draft(draft_id: str):
+    with closing(conn()) as c:
+        d = _draft_or_404(c, draft_id)
+        if d.state == "saved":
+            raise HTTPException(409, "This draft is already in Gmail drafts. Delete it there if you no longer want it.")
+        d.state = "rejected"
+        draft_store.save(c, d, replace_open=False)
+        c.commit()
+        return draft_store.view(d)
 
 
 class PreviewRulesRequest(BaseModel):
@@ -709,6 +794,8 @@ def reset():
     try:
         with closing(conn()) as c:
             db.reset(c)
+            draft_store.clear(c)
+            c.commit()
         for f in (rp.EMAILS_OUT, rp.EXTRACTIONS_OUT):
             f.unlink(missing_ok=True)
         return {"ok": True}
