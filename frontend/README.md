@@ -71,6 +71,16 @@ filter in the dialog. Connected accounts belong to one shared local workspace; c
 the demo login profile does not isolate accounts. Browser OAuth requires the backend on the
 same computer. Requests run synchronously with a five-minute proxy timeout per mailbox.
 
+### M3: drafts, PO-list guard, evaluation
+
+- **Follow-ups** reads `GET /api/drafts`; Approve sends the edited body to `POST /api/drafts/{id}/approve` and shows the
+  backend's reason when Gmail refuses. With the backend off, the bundled sample drafts are shown with a banner.
+- **Order detail** has **Draft follow-up** for orders that need attention (`POST /api/orders/{po}/draft`).
+- **Orders**: Sync inbox with an empty PO list shows "Import your PO list first" with a button; orders that only an
+  email mentioned are listed under "Not in your PO list" and are not flagged; the import toast says how many rows
+  were new and how many were completed from the PO list.
+- **Evaluation** shows only measured runs (no placeholder numbers) and labels where each ran from the recorded `base_url`.
+
 ## Layout
 
 ```

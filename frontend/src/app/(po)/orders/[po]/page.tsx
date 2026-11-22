@@ -3,10 +3,11 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Box, Button, Container, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Container, Stack, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { EmailView, SectionCard, StatusChip } from '@/modules/po/components/bits';
-import { STATUS_META, emailOf, fmtDate, supplierOf, type PoEvent } from '@/modules/po/data/sample';
+import { NEEDS_ATTENTION, STATUS_META, emailOf, fmtDate, supplierOf, type PoEvent } from '@/modules/po/data/sample';
+import { usePoAuth } from '@/modules/po/auth';
 import { usePoDemo } from '@/modules/po/store';
 import { api, type OrderDetailResponse } from '@/modules/po/api';
 
@@ -34,7 +35,10 @@ function Fact({ label, value, alert }: { label: string; value: React.ReactNode; 
 export default function OrderDetailPage() {
     const { po } = useParams<{ po: string }>();
     const router = useRouter();
-    const { orders, drafts, live } = usePoDemo();
+    const { orders, drafts, live, createDraft } = usePoDemo();
+    const { user } = usePoAuth();
+    const [drafting, setDrafting] = React.useState(false);
+    const [draftError, setDraftError] = React.useState<string>();
     const o = orders.find((x) => x.po === decodeURIComponent(po));
     const orderNumber = o?.po;
     const detailKey = orderNumber + ':' + o?.lastEmailId;
@@ -60,7 +64,26 @@ export default function OrderDetailPage() {
     }
     const s = supplierOf(o.supplierId);
     const email = emailOf(o.lastEmailId);
-    const draft = drafts.find((d) => d.po === o.po);
+    // Prefer the draft still waiting for review; otherwise show what happened to the latest one.
+    const draft = drafts.find((d) => d.po === o.po && d.state === 'review') ?? drafts.find((d) => d.po === o.po);
+    const canDraft = live && NEEDS_ATTENTION.includes(o.status);
+    const writeDraft = async () => {
+        setDrafting(true);
+        setDraftError(undefined);
+        try {
+            const id = await createDraft(o.po, user?.name);
+            router.push(`/follow-ups#${id}`);
+        } catch (e) {
+            setDraftError((e as Error).message);
+        } finally {
+            setDrafting(false);
+        }
+    };
+    const draftButton = canDraft && (
+        <Button variant={draft ? 'outlined' : 'contained'} onClick={writeDraft} disabled={drafting}>
+            {drafting ? 'The expediter is writing…' : draft ? 'Draft again' : 'Draft follow-up'}
+        </Button>
+    );
     const late = o.currentDate && o.currentDate > o.requestedDate;
     const fromSupplier = email && (live || email.from === s.email);
     const currentDetail = detail?.key === detailKey ? detail : undefined;
@@ -150,13 +173,26 @@ export default function OrderDetailPage() {
                                         Review draft
                                     </Button>
                                 )}
+                                {draftButton}
                             </Stack>
                         ) : (
-                            <Typography variant="body2" color="text.secondary">
-                                {STATUS_META[o.status].label === 'Confirmed'
-                                    ? 'Nothing to chase. The supplier confirmed this order.'
-                                    : 'No draft yet. Ask the expediter in the chat to write one.'}
-                            </Typography>
+                            <Stack spacing={1.5}>
+                                <Typography variant="body2" color="text.secondary">
+                                    {STATUS_META[o.status].label === 'Confirmed'
+                                        ? 'Nothing to chase. The supplier confirmed this order.'
+                                        : o.status === 'unmatched'
+                                          ? 'Import this order from your PO list before drafting a follow-up.'
+                                          : canDraft
+                                            ? 'The expediter reads this supplier’s past emails and the playbook, then writes a follow-up for you to review.'
+                                            : 'No draft yet. Ask the expediter in the chat to write one.'}
+                                </Typography>
+                                {draftButton}
+                            </Stack>
+                        )}
+                        {draftError && (
+                            <Alert severity="error" sx={{ mt: 1.5 }} onClose={() => setDraftError(undefined)}>
+                                {draftError}
+                            </Alert>
                         )}
                     </SectionCard>
                 </Stack>

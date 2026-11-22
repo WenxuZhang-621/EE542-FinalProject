@@ -37,6 +37,8 @@ export type EvalRun = {
     label: string;
     time: string;
     model: string;
+    /** where the model was served (recorded by extract/eval.py); null on runs older than M3 */
+    base_url?: string | null;
     n_emails: number;
     n_gold_pos: number;
     missed: number;
@@ -119,6 +121,24 @@ export const api = {
         }),
     deleteRule: (id: string) =>
         call<{ ok: boolean }>(`/api/playbook/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    /** Follow-up drafts, newest first. */
+    drafts: () => call<{ drafts: FollowUpDraft[] }>('/api/drafts'),
+    /** Ask the clone to write a follow-up for a PO with an open exception. */
+    createDraft: (po: string, buyerName?: string) =>
+        call<FollowUpDraft>(`/api/orders/${encodeURIComponent(po)}/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ buyerName }),
+        }),
+    /** Save the (edited) draft to Gmail drafts in the supplier's thread. Nothing is sent. */
+    approveDraft: (id: string, body?: string) =>
+        call<FollowUpDraft>(`/api/drafts/${encodeURIComponent(id)}/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body }),
+        }),
+    rejectDraft: (id: string) =>
+        call<FollowUpDraft>(`/api/drafts/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
     evalRuns: () => call<EvalRun[]>('/api/eval-runs'),
     reset: () => call<{ ok: boolean }>('/api/reset', { method: 'POST' }),
 };

@@ -47,6 +47,8 @@ export type PurchaseOrder = {
     reason?: string;
     events: PoEvent[];
     lastEmailId?: string;
+    /** false for orders that only exist because an email mentioned them (not in the imported PO list) */
+    inPoList?: boolean;
 };
 
 export type PlaybookRule = {
@@ -73,6 +75,12 @@ export type FollowUpDraft = {
     body: string;
     why: string;
     sources: Source[];
+    /** set by the backend (GET /api/drafts); sample drafts have none of these */
+    state?: 'review' | 'saved' | 'rejected';
+    createdAt?: string;
+    gmailDraftId?: string | null;
+    /** false when the draft has no supplier email to reply to, so it cannot go into a Gmail thread */
+    canSaveToGmail?: boolean;
 };
 
 export const TODAY = '2026-11-14';

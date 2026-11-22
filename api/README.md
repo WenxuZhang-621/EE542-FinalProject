@@ -80,3 +80,20 @@ can complete an email-only PO while retaining its supplier updates and history.
 mailbox/thread. Draft persistence and approval routes still need C's integration;
 see [M3 A handoff](../docs/m3-a-handoff.md). Google's compose scope includes sending,
 but the application does not call a sending endpoint.
+
+## Follow-up drafts (M3)
+
+| Endpoint | Does | Calls |
+|---|---|---|
+| `POST /api/orders/{po}/draft` | the clone writes a follow-up for a PO with an open exception; replaces that PO's draft still in review | `agent.draft.draft_followup` |
+| `GET /api/drafts` | every draft, newest first, with `state` (`review` / `saved` / `rejected`) | `api/drafts.py` |
+| `POST /api/drafts/{id}/approve` | optional `{body}` with the buyer's edit; saves to the Gmail drafts folder of the mailbox that received the supplier's email, in that thread. **Never sends.** | `ingest.gmail_drafts.save_draft` |
+| `POST /api/drafts/{id}/reject` | marks the draft rejected | `api/drafts.py` |
+
+Drafts live in the `drafts` table (`api/drafts.py`, created on first use; one JSON `FollowUpDraft` per row).
+Drafts the clone writes inside the chat are stored the same way (`chat(..., on_draft=...)`), so they show up on
+the Follow-ups page. `POST /api/reset` clears them.
+
+Errors the page shows as they are: 503 no model key, 409 the PO has no open exception / is not in the PO list /
+the mailbox must be reconnected / the draft has no source email, 401 Gmail authorization lacks draft permission,
+502 the model or Gmail failed. When Gmail refuses, the buyer's edit is already saved and the draft stays in review.

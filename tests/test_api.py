@@ -283,10 +283,12 @@ def test_chat_returns_answer_tools_sources_and_drafts(client, monkeypatch):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["answer"] == "PO-1 is late." and body["toolsUsed"] == ["get_po(PO-1)"]
-    assert body["drafts"] == [{
+    (draft,) = body["drafts"]
+    assert {k: draft[k] for k in ("id", "po", "to", "subject", "body", "why", "sources")} == {
         "id": "d-1", "po": "PO-1", "to": "a@b.example.com", "subject": "Re: PO-1", "body": "Hello", "why": "Late",
         "sources": [{"type": "rule", "ruleId": "3"}, {"type": "email", "emailId": "e1"}],
-    }]
+    }
+    assert draft["state"] == "review" and callable(seen["on_draft"])
     assert seen["messages"] == [{"role": "user", "content": "PO-1?"}] and seen["buyer_name"] == "Alex"
 
 
@@ -362,3 +364,116 @@ def test_import_damaged_excel_returns_readable_error(client):
     response = client.post("/api/po-list", files={"file": ("broken.xlsx", b"not excel")})
     assert response.status_code == 400
     assert "invalid or damaged" in response.json()["detail"]
+
+
+# ------------------------------------------------------------------ follow-up drafts (C, M3)
+
+
+def _import_and_sync(client):
+    csv = (ROOT / "frontend/public/samples/po_list_sample.csv").read_bytes()
+    assert client.post("/api/po-list", files={"file": ("po.csv", csv, "text/csv")}).status_code == 200
+    assert client.post("/api/sync", json={"source": "samples"}).status_code == 200
+
+
+def _fake_drafter(monkeypatch, body="Could you ship part of the order on Dec 1?"):
+    import agent.draft
+    from schema import FollowUpDraft
+
+    calls = []
+
+    def fake(conn, po_number, **kw):
+        calls.append((po_number, kw))
+        return FollowUpDraft(f"d-{len(calls)}", po_number, "sales@shenzhen-parts.example.com", f"Re: {po_number}",
+                             body, "Delay over 7 days", rule_ids=["3"], email_ids=["sample-001"],
+                             reply_to_email_id="sample-001")
+
+    monkeypatch.setattr(agent.draft, "draft_followup", fake)
+    return calls
+
+
+def test_draft_is_created_listed_edited_and_saved_to_gmail(client, monkeypatch):
+    import ingest.gmail_drafts
+
+    _import_and_sync(client)
+    calls = _fake_drafter(monkeypatch)
+    saved = []
+    monkeypatch.setattr(ingest.gmail_drafts, "save_draft",
+                        lambda d, conn=None, **kw: saved.append((d.draft_id, d.body)) or "gmail-draft-42")
+
+    r = client.post("/api/orders/PO-2026-0412/draft", json={"buyerName": "Alex"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["po"] == "PO-2026-0412" and d["state"] == "review" and d["canSaveToGmail"] is True
+    assert d["sources"] == [{"type": "rule", "ruleId": "3"}, {"type": "email", "emailId": "sample-001"}]
+    assert calls[0][1]["buyer_name"] == "Alex"
+    assert [x["id"] for x in client.get("/api/drafts").json()["drafts"]] == ["d-1"]
+
+    # drafting the same PO again replaces the draft that is still in review
+    client.post("/api/orders/PO-2026-0412/draft")
+    assert [x["id"] for x in client.get("/api/drafts").json()["drafts"]] == ["d-2"]
+
+    ok = client.post("/api/drafts/d-2/approve", json={"body": "Edited by the buyer."})
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["state"] == "saved" and ok.json()["gmailDraftId"] == "gmail-draft-42"
+    assert saved == [("d-2", "Edited by the buyer.")]           # Gmail got the edited text
+    (stored,) = client.get("/api/drafts").json()["drafts"]
+    assert stored["body"] == "Edited by the buyer." and stored["state"] == "saved"
+    assert client.post("/api/drafts/d-2/reject").status_code == 409  # already in Gmail
+    # a new draft after saving does not delete the saved one
+    client.post("/api/orders/PO-2026-0412/draft")
+    assert {x["state"] for x in client.get("/api/drafts").json()["drafts"]} == {"saved", "review"}
+
+
+def test_draft_errors_are_clear_and_keep_the_edit(client, monkeypatch):
+    import agent.draft
+    import ingest.gmail_drafts
+    from ingest.gmail_drafts import DraftSaveError
+
+    _import_and_sync(client)
+    assert client.post("/api/orders/PO-nope/draft").status_code == 404
+    monkeypatch.setattr(agent.draft, "draft_followup",
+                        lambda conn, po, **kw: (_ for _ in ()).throw(agent.draft.NoExceptionError("PO has no open exception")))
+    r = client.post("/api/orders/PO-2026-0409/draft")
+    assert r.status_code == 409 and "no open exception" in r.json()["detail"]
+
+    _fake_drafter(monkeypatch)
+    client.post("/api/orders/PO-2026-0412/draft")
+    monkeypatch.setattr(ingest.gmail_drafts, "save_draft",
+                        lambda d, conn=None, **kw: (_ for _ in ()).throw(DraftSaveError("Reconnect it in Settings > Mailboxes.")))
+    bad = client.post("/api/drafts/d-1/approve", json={"body": "My edit"})
+    assert bad.status_code == 409 and "Reconnect" in bad.json()["detail"]
+    (d,) = client.get("/api/drafts").json()["drafts"]
+    assert d["state"] == "review" and d["body"] == "My edit"     # edit kept, still reviewable
+    assert client.post("/api/drafts/d-1/approve", json={"body": "  "}).status_code == 422
+    assert client.post("/api/drafts/d-1/reject").json()["state"] == "rejected"
+    assert client.post("/api/drafts/d-1/approve").status_code == 409
+    assert client.post("/api/drafts/missing/approve").status_code == 404
+
+    monkeypatch.delenv("LLM_API_KEY")
+    assert client.post("/api/orders/PO-2026-0412/draft").status_code == 503
+
+
+def test_unmatched_order_cannot_be_drafted_and_reset_clears_drafts(client, monkeypatch):
+    client.post("/api/sync", json={"source": "samples"})         # no PO list: orders exist only from emails
+    _fake_drafter(monkeypatch)
+    r = client.post("/api/orders/PO-2026-0412/draft")
+    assert r.status_code == 409 and "PO list" in r.json()["detail"]
+    _import_and_sync(client)
+    assert client.post("/api/orders/PO-2026-0412/draft").status_code == 200
+    client.post("/api/reset")
+    assert client.get("/api/drafts").json()["drafts"] == []
+
+
+def test_chat_drafts_land_in_follow_ups(client, monkeypatch):
+    import agent.chat
+    from schema import FollowUpDraft
+
+    def fake_chat(conn, messages, on_draft=None, **kw):
+        d = FollowUpDraft("d-chat", "PO-2026-0412", "sales@shenzhen-parts.example.com", "Re: PO", "Hi", "Late", rule_ids=["3"])
+        on_draft(d)
+        return {"answer": "Drafted.", "tools_used": ["draft_followup(PO-2026-0412)"], "sources": [], "drafts": [d]}
+
+    monkeypatch.setattr(agent.chat, "chat", fake_chat)
+    assert client.post("/api/chat", json={"messages": [{"role": "user", "content": "draft it"}]}).status_code == 200
+    (d,) = client.get("/api/drafts").json()["drafts"]
+    assert d["id"] == "d-chat" and d["canSaveToGmail"] is False   # no source email: cannot go to a thread
