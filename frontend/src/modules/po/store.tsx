@@ -27,8 +27,13 @@ type PoDemo = {
     offlineReason?: string;
     justUpdated?: string;
     sync: (source?: 'auto' | 'gmail' | 'samples' | 'gold', options?: SyncOptions) => Promise<SyncResult>;
-    approve: (id: string, body: string) => void;
-    reject: (id: string) => void;
+    /** Approve: saves to Gmail drafts when live (throws with the backend's reason on failure). */
+    approve: (id: string, body: string) => Promise<void>;
+    reject: (id: string) => Promise<void>;
+    /** Ask the clone for a follow-up on one PO; returns the new draft's id. Live only. */
+    createDraft: (po: string, buyerName?: string) => Promise<string>;
+    /** Number of new and completed rows in the last PO list import (for the toast). */
+    lastImport?: { added: number; completed: number };
     /** Imports a PO list: POST /api/po-list when live, otherwise the in-browser rows. */
     importOrders: (rows: ImportRow[], file?: { name: string; text: string }) => Promise<string[]>;
     reload: () => Promise<void>;
@@ -51,6 +56,9 @@ export function PoDemoProvider({ children }: { children: React.ReactNode }) {
             const data = await api.orders();
             replaceCatalog(data.suppliers, data.emails);
             setOrders(data.orders);
+            // Real drafts replace the bundled examples as soon as the backend answers.
+            const d = await api.drafts().catch(() => ({ drafts: [] as FollowUpDraft[] }));
+            setDrafts(d.drafts.map((x) => ({ ...x, state: x.state ?? 'review' })));
             setLive(true);
             setOfflineReason(undefined);
         } catch (e) {
@@ -97,22 +105,61 @@ export function PoDemoProvider({ children }: { children: React.ReactNode }) {
         [live, reload, synced],
     );
 
-    const approve = React.useCallback((id: string, body: string) => {
-        setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, body, state: 'saved' } : d)));
+    const putDraft = React.useCallback((x: FollowUpDraft) => {
+        const next: DraftState = { ...x, state: x.state ?? 'review' };
+        setDrafts((prev) => (prev.some((d) => d.id === x.id) ? prev.map((d) => (d.id === x.id ? next : d)) : [next, ...prev]));
     }, []);
 
-    const reject = React.useCallback((id: string) => {
-        setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, state: 'rejected' } : d)));
-    }, []);
+    const approve = React.useCallback(
+        async (id: string, body: string) => {
+            if (live) {
+                try {
+                    putDraft(await api.approveDraft(id, body));
+                } catch (e) {
+                    // The backend keeps the buyer's edit even when Gmail refuses; show it.
+                    setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, body } : d)));
+                    throw e;
+                }
+                return;
+            }
+            setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, body, state: 'saved' } : d)));
+        },
+        [live, putDraft],
+    );
+
+    const reject = React.useCallback(
+        async (id: string) => {
+            if (live) {
+                putDraft(await api.rejectDraft(id));
+                return;
+            }
+            setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, state: 'rejected' } : d)));
+        },
+        [live, putDraft],
+    );
+
+    const createDraft = React.useCallback(
+        async (po: string, buyerName?: string) => {
+            const d = await api.createDraft(po, buyerName);
+            // A new draft replaces this PO's earlier one that was still in review.
+            setDrafts((prev) => [{ ...d, state: d.state ?? 'review' }, ...prev.filter((x) => !(x.po === po && x.state === 'review'))]);
+            return d.id;
+        },
+        [],
+    );
+
+    const [lastImport, setLastImport] = React.useState<{ added: number; completed: number }>();
 
     const importOrders = React.useCallback(
         async (rows: ImportRow[], file?: { name: string; text: string }) => {
             if (live && file) {
                 const r = await api.importPoList(new Blob([file.text], { type: 'text/csv' }), file.name);
+                setLastImport({ added: r.new.length, completed: r.completed.length });
                 await reload();
                 return [...r.new, ...r.completed].map((x) => x.po_number);
             }
             const fresh = rows.filter((r) => r.kind === 'new').map(toOrder);
+            setLastImport({ added: fresh.length, completed: 0 });
             setOrders((prev) => [...fresh, ...prev]);
             return fresh.map((o) => o.po);
         },
@@ -120,8 +167,8 @@ export function PoDemoProvider({ children }: { children: React.ReactNode }) {
     );
 
     const value = React.useMemo(
-        () => ({ orders, drafts, live, offlineReason, justUpdated, sync, approve, reject, importOrders, reload }),
-        [orders, drafts, live, offlineReason, justUpdated, sync, approve, reject, importOrders, reload],
+        () => ({ orders, drafts, live, offlineReason, justUpdated, sync, approve, reject, createDraft, lastImport, importOrders, reload }),
+        [orders, drafts, live, offlineReason, justUpdated, sync, approve, reject, createDraft, lastImport, importOrders, reload],
     );
     return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

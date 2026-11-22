@@ -37,15 +37,32 @@ const SEVERITY = ['delayed', 'out_of_stock', 'no_reply', 'price_change', 'partia
 
 export default function OrdersPage() {
     const router = useRouter();
-    const { orders, drafts, justUpdated, live, offlineReason } = usePoDemo();
+    const { orders, drafts, justUpdated, live, offlineReason, lastImport } = usePoDemo();
+    const [needList, setNeedList] = React.useState(false);
     const { user } = usePoAuth();
     const [syncOpen, setSyncOpen] = React.useState(false);
     const [lastSync, setLastSync] = React.useState<SyncResult>();
     const [toast, setToast] = React.useState<string>();
     const [importOpen, setImportOpen] = React.useState(false);
     const [imported, setImported] = React.useState<string[]>([]);
+    const [importedNow, setImportedNow] = React.useState(false);
+    // The store learns the counts when the upload returns; say them once.
+    React.useEffect(() => {
+        if (!importedNow || !lastImport) return;
+        const id = setTimeout(() => {
+            const parts = [`${lastImport.added} new`];
+            if (lastImport.completed) parts.push(`${lastImport.completed} completed from your PO list`);
+            setToast(`Imported: ${parts.join(', ')}`);
+            setImportedNow(false);
+        }, 0);
+        return () => clearTimeout(id);
+    }, [importedNow, lastImport]);
     const isNew = (po: string) => justUpdated === po || imported.includes(po);
 
+    // Orders that exist only because an email mentioned them are listed apart and never flagged.
+    const unmatched = orders.filter((o) => o.status === 'unmatched');
+    const listed = orders.filter((o) => o.status !== 'unmatched');
+    const openSync = () => (live && listed.length === 0 ? setNeedList(true) : setSyncOpen(true));
     const attention = orders
         .filter((o) => NEEDS_ATTENTION.includes(o.status))
         .sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
@@ -61,14 +78,14 @@ export default function OrdersPage() {
                     </Typography>
                     <Typography variant="h4">Purchase orders</Typography>
                     <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                        {user?.company} · {orders.length} open purchase orders with {new Set(orders.map((o) => o.supplierId)).size} suppliers
+                        {user?.company} · {listed.length} open purchase orders with {new Set(listed.map((o) => o.supplierId)).size} suppliers
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1.5}>
                     <Button variant="outlined" startIcon={<UploadFileOutlinedIcon />} onClick={() => setImportOpen(true)}>
                         Import PO list
                     </Button>
-                    <Button variant="contained" startIcon={<SyncIcon />} onClick={() => setSyncOpen(true)}>
+                    <Button variant="contained" startIcon={<SyncIcon />} onClick={openSync}>
                         Sync inbox
                     </Button>
                 </Stack>
@@ -80,18 +97,34 @@ export default function OrdersPage() {
                 {lastSync.syncedAt && ` · ${new Date(lastSync.syncedAt).toLocaleTimeString()}`}
                 {lastSync.note && <Typography variant="body2">{lastSync.note}</Typography>}
             </Alert>}
+            {needList && (
+                <Alert
+                    severity="info"
+                    sx={{ mb: 2 }}
+                    onClose={() => setNeedList(false)}
+                    action={
+                        <Button color="inherit" size="small" onClick={() => { setNeedList(false); setImportOpen(true); }}>
+                            Import PO list
+                        </Button>
+                    }
+                >
+                    <strong>Import your PO list first.</strong> The assistant only reads email from the suppliers on your list,
+                    and compares each update with what you ordered.
+                </Alert>
+            )}
             <SyncInboxDialog open={syncOpen} onClose={() => setSyncOpen(false)} onSynced={setLastSync} />
             <ImportPoDialog
                 open={importOpen}
                 onClose={() => setImportOpen(false)}
                 onImported={(pos) => {
                     setImported(pos);
-                    setToast(`Imported ${pos.length} new orders from the PO list`);
+                    void pos;
+                    setImportedNow(true);
                 }}
             />
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>
-                <StatCard label="Open POs" value={orders.length} hint="From the imported PO list" icon={<ListAltOutlinedIcon />} />
+                <StatCard label="Open POs" value={listed.length} hint="From the imported PO list" icon={<ListAltOutlinedIcon />} />
                 <StatCard label="Delayed or short" value={count('delayed', 'out_of_stock', 'partial')} hint="Found in supplier emails" icon={<ScheduleOutlinedIcon />} />
                 <StatCard label="No reply" value={count('no_reply')} hint="2+ business days without an answer" icon={<MarkEmailUnreadOutlinedIcon />} />
                 <StatCard label="Drafts to review" value={toReview.length} hint="Written by the expediter" icon={<EditNoteOutlinedIcon />} />
@@ -147,6 +180,22 @@ export default function OrdersPage() {
                 </Stack>
             </SectionCard>
 
+            {unmatched.length > 0 && (
+                <Box sx={{ mt: 3 }}>
+                    <SectionCard title={`Not in your PO list (${unmatched.length})`}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                            A supplier email mentions these orders, but they are not in the list you imported, so there is nothing to
+                            compare them with. Import a list that includes them to track them.
+                        </Typography>
+                        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                            {unmatched.map((o) => (
+                                <Chip key={o.po} label={`${o.po} · ${supplierOf(o.supplierId).name}`} variant="outlined" onClick={() => router.push(`/orders/${o.po}`)} />
+                            ))}
+                        </Stack>
+                    </SectionCard>
+                </Box>
+            )}
+
             <Box sx={{ mt: 3 }}>
                 <SectionCard title="All purchase orders">
                     <Box sx={{ overflowX: 'auto' }}>
@@ -161,7 +210,7 @@ export default function OrdersPage() {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {orders.map((o) => (
+                                {listed.map((o) => (
                                     <TableRow
                                         key={o.po}
                                         hover

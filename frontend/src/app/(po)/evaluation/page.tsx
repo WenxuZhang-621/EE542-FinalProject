@@ -13,25 +13,30 @@ import {
     TableRow,
     Typography,
 } from '@mui/material';
-import { SampleBanner, SectionCard } from '@/modules/po/components/bits';
+import { SectionCard } from '@/modules/po/components/bits';
 import { api, type EvalRun } from '@/modules/po/api';
 
 type Row = { m: string; model: string; where: string; emails: number; acc: number; recall: number | null; rating: number | null; sec: number; time?: string };
 
-// Placeholder rows, shown only until extract/eval.py has stored a run (data/eval_runs.jsonl).
-const PLACEHOLDER: Row[] = [
-    { m: 'M1', model: 'API model', where: 'Vendor API', emails: 6, acc: 0.81, recall: null, rating: null, sec: 2.4 },
-    { m: 'M2', model: 'API model', where: 'Vendor API', emails: 20, acc: 0.84, recall: 0.86, rating: null, sec: 2.2 },
-    { m: 'M3', model: 'Qwen3-8B', where: 'AWS g5 + vLLM', emails: 100, acc: 0.87, recall: 0.91, rating: 3.8, sec: 0.9 },
-    { m: 'M4', model: 'Qwen3-8B', where: 'AWS g5 + vLLM', emails: 120, acc: 0.9, recall: 0.94, rating: 4.2, sec: 0.8 },
-];
+/** Where the model was served, from the endpoint extract/eval.py recorded with the run. */
+function runsOn(r: EvalRun): string {
+    const url = r.base_url ?? '';
+    if (!url) return /ollama/i.test(r.label) ? 'Local (Ollama)' : 'OpenAI API';
+    if (/:11434/.test(url)) return 'Local (Ollama)';
+    if (/localhost:8001|127\.0\.0\.1:8001/.test(url)) return 'AWS GPU + vLLM';
+    if (/localhost|127\.0\.0\.1/.test(url)) return 'Local model server';
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return url;
+    }
+}
 
 function toRow(r: EvalRun): Row {
-    const gpu = /localhost:8001|vllm|qwen/i.test(r.model);
     return {
         m: r.label,
         model: r.model,
-        where: gpu ? 'AWS g5 + vLLM' : 'Vendor API',
+        where: runsOn(r),
         emails: r.n_emails,
         acc: r.overall,
         recall: null,
@@ -63,16 +68,37 @@ export default function EvaluationPage() {
             .catch((e) => setError((e as Error).message));
     }, []);
 
-    const real = !!runs && runs.length > 0;
-    const rows = real ? runs! : PLACEHOLDER;
+    const rows = runs ?? [];
     const last = rows[rows.length - 1];
     const first = rows[0];
-    const tiles = [
-        { label: 'Fields extracted correctly', value: `${Math.round(last.acc * 100)}%`, hint: `${Math.round(first.acc * 100)}% at ${first.m}` },
-        { label: 'Problems caught (recall)', value: last.recall === null ? '—' : `${Math.round(last.recall * 100)}%`, hint: 'Measured at M4 on generated scenarios' },
-        { label: 'Draft rating by buyers', value: last.rating === null ? '—' : `${last.rating} / 5`, hint: 'Rated by interviewed buyers (M4)' },
-        { label: 'Seconds per email', value: `${last.sec}`, hint: `${first.sec}s at ${first.m}` },
-    ];
+    const tiles = last
+        ? [
+              { label: 'Fields extracted correctly', value: `${Math.round(last.acc * 100)}%`, hint: rows.length > 1 ? `${Math.round(first.acc * 100)}% at ${first.m}` : `${last.emails} test emails` },
+              { label: 'Problems caught (recall)', value: '—', hint: 'Measured at M4 on generated scenarios' },
+              { label: 'Draft rating by buyers', value: '—', hint: 'Rated by interviewed buyers (M4)' },
+              { label: 'Seconds per email', value: `${last.sec}`, hint: last.where },
+          ]
+        : [];
+
+    if (!last) {
+        return (
+            <Container maxWidth="lg">
+                <Typography variant="overline" color="text.secondary" fontWeight={700}>
+                    Evaluation
+                </Typography>
+                <Typography variant="h4">How well it works</Typography>
+                <SectionCard title={error ? 'Evaluation runs could not be loaded' : runs ? 'No evaluation run yet' : 'Loading…'}>
+                    <Typography color="text.secondary">
+                        {error
+                            ? `The backend did not answer (${error}). Start it and reload this page.`
+                            : runs
+                              ? 'This page only shows measured results. Run `python extract/eval.py --label M3` on the backend; each run adds a row here.'
+                              : 'Reading stored runs…'}
+                    </Typography>
+                </SectionCard>
+            </Container>
+        );
+    }
 
     return (
         <Container maxWidth="lg">
@@ -81,22 +107,11 @@ export default function EvaluationPage() {
             </Typography>
             <Typography variant="h4">How well it works</Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-                Each milestone adds a row, so the improvement from week to week is visible.
+                Each run adds a row, so the improvement from week to week is visible.
             </Typography>
-            {!real && (
-                <SampleBanner
-                    text={
-                        error
-                            ? `Backend not reachable (${error}); placeholder numbers.`
-                            : 'No stored run yet: placeholder numbers. Run `python extract/eval.py --label M2` to fill this page.'
-                    }
-                />
-            )}
-            {real && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-                    Live from data/eval_runs.jsonl · every run is scored on the same fields with the current gold answers.
-                </Typography>
-            )}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                Measured results from data/eval_runs.jsonl · every run is scored on the same fields with the current gold answers.
+            </Typography>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>
                 {tiles.map((t) => (
@@ -114,7 +129,7 @@ export default function EvaluationPage() {
                 ))}
             </Box>
 
-            <SectionCard title={real ? 'Every run' : 'By milestone'}>
+            <SectionCard title="Every run">
                 <Box sx={{ overflowX: 'auto' }}>
                     <Table size="small">
                         <TableHead>
